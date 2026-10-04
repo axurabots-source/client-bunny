@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1
+#
+# Custom build of gosom/google-maps-scraper that uses Obscura instead of a
+# locally-launched Chromium. Obscura is a static Rust binary exposing a
+# Chrome DevTools Protocol (CDP) endpoint, so no Playwright browser download
+# and none of Chromium's system libraries (libnss3, libgbm1, etc.) are
+# needed in the final image — it ends up much smaller than the original.
+#
+# BEFORE BUILDING, you must:
+#   1. Fork https://github.com/gosom/scrapemate on GitHub
+#   2. Apply jshttp-obscura.patch to your fork (see SETUP.md)
+#   3. Fork https://github.com/gosom/google-maps-scraper on GitHub
+#   4. In that fork's go.mod, add a replace directive pointing at your
+#      patched scrapemate fork (see SETUP.md for the exact line)
+#   5. Edit the two ARGs below to point at your forks
+
+ARG GO_VERSION=1.27.1
+ARG SCRAPER_REPO=https://github.com/axurabots-source/google-maps-scraper.git
+ARG SCRAPER_REF=main
+ARG OBSCURA_VERSION=latest
+ARG OBSCURA_ASSET=obscura-x86_64-linux.tar.gz
+
+# ---- Build stage: compile the patched scraper -----------------------------
+FROM golang:${GO_VERSION}-trixie AS builder
+ARG SCRAPER_REPO
+ARG SCRAPER_REF
+WORKDIR /app
+RUN git clone --depth 1 --branch ${SCRAPER_REF} ${SCRAPER_REPO} .
+RUN go mod download
+RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
+
+# ---- Fetch stage: grab the Obscura release binary --------------------------
+FROM debian:trixie-slim AS obscura-fetch
+ARG OBSCURA_VERSION
+ARG OBSCURA_ASSET
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -sL -o /tmp/obscura.tar.gz \
+      https://github.com/h4ckf0r0day/obscura/releases/${OBSCURA_VERSION}/download/${OBSCURA_ASSET} \
+    && mkdir -p /opt/obscura \
+    && tar xzf /tmp/obscura.tar.gz -C /opt/obscura \
+    && chmod +x /opt/obscura/obscura
+
+# ---- Final stage ------------------------------------------------------------
+# Note: no libnss3/libgbm1/etc. here — Obscura is a static binary with no
+# system browser dependencies, unlike Chromium.
+FROM debian:trixie-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY --from=obscura-fetch /opt/obscura/obscura /usr/bin/obscura
+COPY --from=builder /usr/bin/google-maps-scraper /usr/bin/google-maps-scraper
+COPY entrypoint.sh /usr/bin/entrypoint.sh
+RUN chmod +x /usr/bin/entrypoint.sh
+
+# Obscura's CDP server. google-maps-scraper connects to it via OBSCURA_CDP_URL.
+ENV OBSCURA_CDP_URL=http://127.0.0.1:9222
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/bin/entrypoint.sh"]

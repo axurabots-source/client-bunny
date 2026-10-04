@@ -1,0 +1,101 @@
+diff --git a/adapters/fetchers/jshttp/jshttp.go b/adapters/fetchers/jshttp/jshttp.go
+index 2ced968..3c79f23 100644
+--- a/adapters/fetchers/jshttp/jshttp.go
++++ b/adapters/fetchers/jshttp/jshttp.go
+@@ -3,6 +3,8 @@ package jshttp
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
++	"os"
+ 	"time"
+ 
+ 	"github.com/mxschmitt/playwright-go"
+@@ -51,15 +53,22 @@ type JSFetcherOptions struct {
+ }
+ 
+ func New(params JSFetcherOptions) (scrapemate.HTTPFetcher, error) {
+-	opts := []*playwright.RunOptions{
+-		{
+-			Browsers: []string{"chromium"},
+-			Verbose:  true,
+-		},
+-	}
++	// When OBSCURA_CDP_URL is set, every newBrowser() call connects to an
++	// already-running Obscura instance instead of launching Chromium, so
++	// there is no need to download/install the Chromium browser binary.
++	// We still need the Playwright Go driver itself (playwright.Run below)
++	// since it is what speaks the CDP protocol to ConnectOverCDP.
++	if obscuraCDPURL() == "" {
++		opts := []*playwright.RunOptions{
++			{
++				Browsers: []string{"chromium"},
++				Verbose:  true,
++			},
++		}
+ 
+-	if err := playwright.Install(opts...); err != nil {
+-		return nil, err
++		if err := playwright.Install(opts...); err != nil {
++			return nil, err
++		}
+ 	}
+ 
+ 	pw, err := playwright.Run()
+@@ -289,7 +298,33 @@ func (o *browser) Close() {
+ 	_ = o.browser.Close()
+ }
+ 
++// obscuraCDPURL returns the CDP websocket/http endpoint for an Obscura
++// `obscura serve` instance, e.g. "http://127.0.0.1:9222", read from the
++// OBSCURA_CDP_URL environment variable. When unset, newBrowser falls back
++// to launching a local Chromium via Playwright exactly as before — this
++// keeps the patch opt-in and reversible.
++func obscuraCDPURL() string {
++	return os.Getenv("OBSCURA_CDP_URL")
++}
++
+ func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPool *ProxyPool, ua string) (*browser, error) {
++	// --- Obscura path -------------------------------------------------
++	// Obscura is started separately (e.g. `obscura serve --port 9222
++	// --stealth`) and exposes a CDP endpoint. We connect to it instead of
++	// launching Chromium ourselves. Per-launch flags like --no-sandbox,
++	// --disable-gpu etc. are Chromium process flags and do not apply here;
++	// the equivalent behavior (headless, stealth, proxy, user-agent) is
++	// configured on the `obscura serve` process itself via its own flags.
++	if cdpURL := obscuraCDPURL(); cdpURL != "" {
++		br, err := pw.Chromium.ConnectOverCDP(cdpURL)
++		if err != nil {
++			return nil, fmt.Errorf("connect to obscura CDP endpoint %q: %w", cdpURL, err)
++		}
++
++		return newBrowserContext(br, proxyPool, ua)
++	}
++	// --- end Obscura path ----------------------------------------------
++
+ 	opts := playwright.BrowserTypeLaunchOptions{
+ 		Headless: playwright.Bool(headless),
+ 		Args: []string{
+@@ -326,6 +361,13 @@ func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPo
+ 		return nil, err
+ 	}
+ 
++	return newBrowserContext(br, proxyPool, ua)
++}
++
++// newBrowserContext creates the shared browser context (UA, viewport, proxy)
++// used by both the normal Playwright-launched Chromium path and the Obscura
++// CDP-connected path, so behavior stays identical between the two.
++func newBrowserContext(br playwright.Browser, proxyPool *ProxyPool, ua string) (*browser, error) {
+ 	const defaultWidth, defaultHeight = 1920, 1080
+ 
+ 	bctx, err := br.NewContext(playwright.BrowserNewContextOptions{
+@@ -357,6 +399,8 @@ func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPo
+ 		}(),
+ 	})
+ 	if err != nil {
++		_ = br.Close()
++
+ 		return nil, err
+ 	}
+ 
