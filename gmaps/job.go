@@ -202,7 +202,36 @@ func (j *GmapJob) Process(ctx context.Context, resp *scrapemate.Response) (any, 
 	return nil, next, nil
 }
 
+func isContextDestroyedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Execution context was destroyed") ||
+		strings.Contains(msg, "Target closed")
+}
+
 func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPage) scrapemate.Response {
+	var resp scrapemate.Response
+
+	for attempt := 0; attempt < 3; attempt++ {
+		resp = j.doBrowserActions(ctx, page)
+		if resp.Error == nil {
+			return resp
+		}
+
+		if isContextDestroyedError(resp.Error) {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		return resp
+	}
+
+	return resp
+}
+
+func (j *GmapJob) doBrowserActions(ctx context.Context, page scrapemate.BrowserPage) scrapemate.Response {
 	var resp scrapemate.Response
 
 	pageResponse, err := page.Goto(j.GetFullURL(), scrapemate.WaitUntilDOMContentLoaded)
@@ -211,6 +240,8 @@ func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPag
 
 		return resp
 	}
+
+	time.Sleep(2 * time.Second)
 
 	clickRejectCookiesIfRequired(page)
 
@@ -227,7 +258,7 @@ func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPag
 	// check element scroll
 	sel := `div[role='feed']`
 
-	err = page.WaitForSelector(sel, 10*time.Second)
+	err = page.WaitForSelector(sel, 15*time.Second)
 
 	var singlePlace bool
 
@@ -275,6 +306,7 @@ func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPag
 
 	return resp
 }
+
 
 func waitUntilURLContains(ctx context.Context, page scrapemate.BrowserPage, s string) bool {
 	ticker := time.NewTicker(time.Millisecond * 150)

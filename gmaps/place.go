@@ -185,12 +185,34 @@ func (j *PlaceJob) Process(_ context.Context, resp *scrapemate.Response) (any, [
 func (j *PlaceJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPage) scrapemate.Response {
 	var resp scrapemate.Response
 
+	for attempt := 0; attempt < 3; attempt++ {
+		resp = j.doBrowserActions(ctx, page)
+		if resp.Error == nil {
+			return resp
+		}
+
+		if isContextDestroyedError(resp.Error) {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		return resp
+	}
+
+	return resp
+}
+
+func (j *PlaceJob) doBrowserActions(ctx context.Context, page scrapemate.BrowserPage) scrapemate.Response {
+	var resp scrapemate.Response
+
 	pageResponse, err := page.Goto(j.GetURL(), scrapemate.WaitUntilDOMContentLoaded)
 	if err != nil {
 		resp.Error = err
 
 		return resp
 	}
+
+	time.Sleep(1 * time.Second)
 
 	clickRejectCookiesIfRequired(page)
 
@@ -215,6 +237,7 @@ func (j *PlaceJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPa
 	}
 
 	resp.Meta["json"] = raw
+
 
 	if j.ExtractExtraReviews {
 		reviewCount := j.getReviewCount(raw)
