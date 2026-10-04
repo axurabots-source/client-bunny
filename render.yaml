@@ -7,4 +7,4 @@ services:
     startCommand: ./start.sh
     envVars:
       - key: OBSCURA_STEALTH
-        value: "true"
+        value: "false"

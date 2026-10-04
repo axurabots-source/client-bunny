@@ -6,7 +6,7 @@
 set -e
 
 OBSCURA_PORT="${OBSCURA_PORT:-9222}"
-OBSCURA_STEALTH="${OBSCURA_STEALTH:-true}"
+OBSCURA_STEALTH="${OBSCURA_STEALTH:-false}"
 PORT="${PORT:-8080}"   # Render injects PORT; the scraper's -web mode must bind to it
 
 export OBSCURA_NAV_TIMEOUT_MS="${OBSCURA_NAV_TIMEOUT_MS:-180000}"

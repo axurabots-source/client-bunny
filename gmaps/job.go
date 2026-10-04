@@ -296,8 +296,16 @@ func (j *GmapJob) doBrowserActions(ctx context.Context, page scrapemate.BrowserP
 		return resp
 	}
 
-	body, err := page.Content()
-	if err != nil {
+	var body string
+	for contentAttempt := 0; contentAttempt < 3; contentAttempt++ {
+		body, err = page.Content()
+		if err == nil {
+			break
+		}
+		if isContextDestroyedError(err) && contentAttempt < 2 {
+			time.Sleep(2 * time.Second)
+			continue
+		}
 		resp.Error = err
 		return resp
 	}
@@ -383,9 +391,18 @@ func scroll(ctx context.Context,
 			waitTime2 = maxWait2
 		}
 
-		// Scroll to the bottom of the page.
-		scrollHeight, err := page.Eval(fmt.Sprintf(expr, waitTime2))
-		if err != nil {
+		// Scroll to the bottom of the page with retry on context destroyed.
+		var scrollHeight any
+		var err error
+		for evalAttempt := 0; evalAttempt < 3; evalAttempt++ {
+			scrollHeight, err = page.Eval(fmt.Sprintf(expr, waitTime2))
+			if err == nil {
+				break
+			}
+			if isContextDestroyedError(err) && evalAttempt < 2 {
+				time.Sleep(2 * time.Second)
+				continue
+			}
 			return cnt, err
 		}
 
