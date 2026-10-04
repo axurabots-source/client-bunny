@@ -263,7 +263,7 @@ func defaultSetupMate(cfg *runner.Config) func(context.Context, io.Writer, *web.
 	return func(_ context.Context, writer io.Writer, job *web.Job) (mateRunner, error) {
 		opts := []func(*scrapemateapp.Config) error{
 			scrapemateapp.WithConcurrency(cfg.Concurrency),
-			scrapemateapp.WithExitOnInactivity(time.Minute * 3),
+			scrapemateapp.WithExitOnInactivity(time.Minute * 10),
 		}
 
 		if !job.Data.FastMode {
