@@ -344,5 +344,5 @@ tool (
 	golang.org/x/vuln/cmd/govulncheck
 )
 
-replace github.com/gosom/scrapemate => github.com/axurabots-source/scrapemate v1.4.0-obscura
+replace github.com/gosom/scrapemate => github.com/axurabots-source/scrapemate v1.4.1-obscura
 
