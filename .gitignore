@@ -1,3 +1,4 @@
+# Scraper artifacts
 cache/
 vendor
 bin
@@ -6,3 +7,36 @@ examples/examples-api/map-outputs
 examples/examples-api/**/__pycache__/
 examples/examples-api/**/*.py[cod]
 gmaps-output
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database local files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Next.js build
+.next/
+out/
+build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
