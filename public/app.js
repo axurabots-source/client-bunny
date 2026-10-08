@@ -268,7 +268,10 @@ async function openLeadDetail(leadId) {
                         <button class="btn btn-primary" id="crawlBtn_${lead.id}" onclick="triggerCrawl('${lead.id}')">
                             🕸️ Crawl Website for Contacts (Module 3)
                         </button>
-                    ` : '<div style="font-size: 12px; color: var(--text-secondary);">No website available for deep crawling. Ready for Google Dorking (Module 4).</div>'}
+                    ` : ''}
+                    <button class="btn btn-secondary" id="dorkBtn_${lead.id}" onclick="triggerDork('${lead.id}')">
+                        🕵️ Google Dork for Owner (Module 4)
+                    </button>
                     <div style="display: flex; gap: 8px;">
                         ${lead.website ? `<a href="${escapeHtml(lead.website)}" target="_blank" class="btn btn-secondary">Visit Website</a>` : ''}
                         ${lead.gmb_link ? `<a href="${escapeHtml(lead.gmb_link)}" target="_blank" class="btn btn-secondary">Open Google Maps</a>` : ''}
@@ -281,6 +284,35 @@ async function openLeadDetail(leadId) {
         drawerOverlay.classList.add('open');
     } catch (err) {
         console.error('Error opening drawer:', err);
+    }
+}
+
+async function triggerDork(leadId) {
+    const btn = document.getElementById(`dorkBtn_${leadId}`);
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Running Dork Search...';
+    }
+    showToast('Running zero-cost dorks on Google/Search...');
+
+    try {
+        const res = await fetch(`/api/leads/${leadId}/dork`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            const count = (data.dorkResult.linkedinProfiles.length + data.dorkResult.facebookUrls.length);
+            showToast(`✅ Dork complete! Found ${count} public profiles.`);
+            await openLeadDetail(leadId); // Refresh drawer
+            await fetchLeads(); // Refresh table status
+        } else {
+            showToast('❌ Dork error: ' + data.error);
+        }
+    } catch (err) {
+        showToast('❌ Network error during dork resolution');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🕵️ Google Dork for Owner (Module 4)';
+        }
     }
 }
 

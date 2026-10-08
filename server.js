@@ -72,6 +72,23 @@ app.post('/api/leads/:id/enrich', async (req, res) => {
     }
 });
 
+// 3.6. Trigger Google/Search Dorking for Owner Contacts
+app.post('/api/leads/:id/dork', async (req, res) => {
+    try {
+        const { resolveDorkContacts } = require('./modules/m4_dork_resolver/dorkResolver');
+        const lead = await LeadRepository.getLeadById(req.params.id);
+        if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
+
+        const dorkResult = await resolveDorkContacts(lead.title, lead.city || 'Lahore', lead.id);
+        const updatedLead = await LeadRepository.getLeadById(lead.id);
+
+        res.json({ success: true, dorkResult, lead: updatedLead });
+    } catch (err) {
+        console.error("Error running dork search:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // 4. Trigger Ingestion of dentists_in_lahore.csv
 app.post('/api/ingest', async (req, res) => {
     try {
