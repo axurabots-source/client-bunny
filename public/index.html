@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Bunny — Lead Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Top Navigation -->
+    <header class="header">
+        <div class="header-inner">
+            <div class="brand">
+                <span class="brand-badge">CLIENT BUNNY</span>
+                <span class="pipeline-tag">Phase 1 Pipeline</span>
+            </div>
+            <div class="header-actions">
+                <div class="db-status">
+                    <span class="status-dot"></span>
+                    <span class="status-label">Supabase Cloud</span>
+                </div>
+                <button id="reingestBtn" class="btn btn-secondary">
+                    <span>Sync dentists.csv</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        
+        <!-- Hero & Overview Header -->
+        <section class="section-hero">
+            <div class="hero-left">
+                <h1 class="page-title">Lead Pipeline & Pain-Point Radar</h1>
+                <p class="page-subtitle">Targeted Google Maps intelligence enriched with automated buyer pain-points and contact discovery.</p>
+            </div>
+            <div class="hero-right">
+                <div class="city-pill">📍 Lahore, Pakistan</div>
+            </div>
+        </section>
+
+        <!-- Metrics Strip -->
+        <section class="metrics-grid">
+            <div class="metric-card">
+                <span class="metric-label">TOTAL LEADS</span>
+                <div class="metric-value" id="statTotal">—</div>
+                <span class="metric-sub">Ingested to database</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">NO WEBSITE</span>
+                <div class="metric-value highlight" id="statNoWebsite">—</div>
+                <span class="metric-sub">Immediate web design targets</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">HIGH SPENDERS</span>
+                <div class="metric-value" id="statHighTicket">—</div>
+                <span class="metric-sub">150+ reviews, top patient flow</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">REPUTATION RISKS</span>
+                <div class="metric-value" id="statRepRisk">—</div>
+                <span class="metric-sub">Recent 1-star patient complaints</span>
+            </div>
+        </section>
+
+        <!-- Filter & Search Controls -->
+        <section class="controls-bar">
+            <div class="search-box">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Search clinics by name, address, or phone...">
+            </div>
+            <div class="filter-pills" id="filterPills">
+                <button class="filter-btn active" data-filter="all">All (<span id="countAll">0</span>)</button>
+                <button class="filter-btn" data-filter="no_website">No Website (<span id="countNoWeb">0</span>)</button>
+                <button class="filter-btn" data-filter="high_ticket_spender">High Spenders (<span id="countHigh">0</span>)</button>
+                <button class="filter-btn" data-filter="reputation_risk">Reputation Risk (<span id="countRisk">0</span>)</button>
+            </div>
+        </section>
+
+        <!-- Leads Data Table -->
+        <section class="table-card">
+            <div class="table-container">
+                <table class="leads-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 28%;">CLINIC / BUSINESS</th>
+                            <th style="width: 14%;">REPUTATION</th>
+                            <th style="width: 22%;">ONLINE PRESENCE</th>
+                            <th style="width: 24%;">DETECTED PAIN POINTS</th>
+                            <th style="width: 12%; text-align: right;">ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leadsTbody">
+                        <tr>
+                            <td colspan="5" class="table-loading">Loading leads from Supabase...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="table-footer">
+                <span id="showingCount">Showing 0 of 0 leads</span>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Slide-over Lead Detail Drawer -->
+    <div class="drawer-overlay" id="drawerOverlay"></div>
+    <aside class="drawer" id="leadDrawer">
+        <div class="drawer-header">
+            <div>
+                <span class="drawer-tag">LEAD PROFILE</span>
+                <h2 class="drawer-title" id="drawerTitle">—</h2>
+            </div>
+            <button class="close-btn" id="closeDrawerBtn">&times;</button>
+        </div>
+
+        <div class="drawer-body" id="drawerBody">
+            <!-- Dynamically populated -->
+        </div>
+    </aside>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
