@@ -262,10 +262,17 @@ async function openLeadDetail(leadId) {
             </div>
 
             <div class="detail-section">
-                <span class="detail-heading">QUICK ACTIONS</span>
-                <div style="display: flex; gap: 8px;">
-                    ${lead.website ? `<a href="${escapeHtml(lead.website)}" target="_blank" class="btn btn-secondary">Visit Website</a>` : ''}
-                    ${lead.gmb_link ? `<a href="${escapeHtml(lead.gmb_link)}" target="_blank" class="btn btn-secondary">Open Google Maps</a>` : ''}
+                <span class="detail-heading">PIPELINE ACTIONS</span>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${lead.website ? `
+                        <button class="btn btn-primary" id="crawlBtn_${lead.id}" onclick="triggerCrawl('${lead.id}')">
+                            🕸️ Crawl Website for Contacts (Module 3)
+                        </button>
+                    ` : '<div style="font-size: 12px; color: var(--text-secondary);">No website available for deep crawling. Ready for Google Dorking (Module 4).</div>'}
+                    <div style="display: flex; gap: 8px;">
+                        ${lead.website ? `<a href="${escapeHtml(lead.website)}" target="_blank" class="btn btn-secondary">Visit Website</a>` : ''}
+                        ${lead.gmb_link ? `<a href="${escapeHtml(lead.gmb_link)}" target="_blank" class="btn btn-secondary">Open Google Maps</a>` : ''}
+                    </div>
                 </div>
             </div>
         `;
@@ -274,6 +281,35 @@ async function openLeadDetail(leadId) {
         drawerOverlay.classList.add('open');
     } catch (err) {
         console.error('Error opening drawer:', err);
+    }
+}
+
+async function triggerCrawl(leadId) {
+    const btn = document.getElementById(`crawlBtn_${leadId}`);
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Crawling pages...';
+    }
+    showToast('Starting deep crawl on website...');
+
+    try {
+        const res = await fetch(`/api/leads/${leadId}/enrich`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            const foundCount = (data.crawlResult.emails.length + data.crawlResult.doctor_names.length);
+            showToast(`✅ Crawl finished! Found ${foundCount} contact points.`);
+            await openLeadDetail(leadId); // Refresh drawer
+            await fetchLeads(); // Refresh table status
+        } else {
+            showToast('❌ Crawl error: ' + data.error);
+        }
+    } catch (err) {
+        showToast('❌ Network error crawling website');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🕸️ Crawl Website for Contacts (Module 3)';
+        }
     }
 }
 

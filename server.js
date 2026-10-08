@@ -54,6 +54,24 @@ app.get('/api/leads/:id', async (req, res) => {
     }
 });
 
+// 3.5. Trigger Deep Crawl on a Lead's Website
+app.post('/api/leads/:id/enrich', async (req, res) => {
+    try {
+        const { crawlWebsite } = require('./modules/m3_website_crawler/crawler');
+        const lead = await LeadRepository.getLeadById(req.params.id);
+        if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
+        if (!lead.website) return res.status(400).json({ success: false, error: 'Lead has no website to crawl' });
+
+        const crawlResult = await crawlWebsite(lead.website, lead.id);
+        const updatedLead = await LeadRepository.getLeadById(lead.id);
+
+        res.json({ success: true, crawlResult, lead: updatedLead });
+    } catch (err) {
+        console.error("Error enriching lead:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // 4. Trigger Ingestion of dentists_in_lahore.csv
 app.post('/api/ingest', async (req, res) => {
     try {
