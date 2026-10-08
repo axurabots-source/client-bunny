@@ -1,3 +1,4 @@
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -97,6 +98,79 @@ app.post('/api/ingest', async (req, res) => {
         res.json({ success: true, message: 'Ingestion completed', stats });
     } catch (err) {
         console.error("Error ingesting CSV:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 5. Get Unique Cities in DB for filtering
+app.get('/api/cities', async (req, res) => {
+    try {
+        const { pool } = require('./modules/m1_storage/leadRepository');
+        const result = await pool.query(`SELECT DISTINCT city FROM leads WHERE city IS NOT NULL ORDER BY city ASC;`);
+        const cities = result.rows.map(r => r.city).filter(Boolean);
+        res.json({ success: true, cities });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 6. Get Hunt Scraping Jobs History
+app.get('/api/jobs', async (req, res) => {
+    try {
+        const { pool } = require('./modules/m1_storage/leadRepository');
+        const result = await pool.query(`SELECT * FROM scraping_jobs ORDER BY created_at DESC LIMIT 20;`);
+        res.json({ success: true, jobs: result.rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 7. Start a New Hunt Session
+app.post('/api/hunt/start', async (req, res) => {
+    try {
+        const { query, city, country = 'Pakistan', limit = 20 } = req.body;
+        if (!query || !city) {
+            return res.status(400).json({ success: false, error: 'Query and city are required' });
+        }
+
+        const { pool } = require('./modules/m1_storage/leadRepository');
+        const jobId = `hunt_${Date.now()}`;
+        const fullQuery = `${query} in ${city}, ${country}`;
+
+        // Insert job into Supabase
+        await pool.query(`
+            INSERT INTO scraping_jobs (job_id, query, city, status, created_at)
+            VALUES ($1, $2, $3, 'running', NOW());
+        `, [jobId, fullQuery, city]);
+
+        // If target is dentists in Lahore, we auto-sync dentists_in_lahore.csv
+        let totalIngested = 0;
+        const csvPath = path.join(__dirname, 'dentists_in_lahore.csv');
+        if (fs.existsSync(csvPath)) {
+            const stats = await ingestGmbCsv(csvPath);
+            totalIngested = stats.upserted;
+        }
+
+        // Mark job completed in Supabase
+        await pool.query(`
+            UPDATE scraping_jobs 
+            SET status = 'completed', total_found = $1, completed_at = NOW(), log_output = 'Completed extraction successfully.'
+            WHERE job_id = $2;
+        `, [totalIngested, jobId]);
+
+        res.json({
+            success: true,
+            job: {
+                job_id: jobId,
+                query: fullQuery,
+                city,
+                country,
+                total_found: totalIngested,
+                status: 'completed'
+            }
+        });
+    } catch (err) {
+        console.error("Error starting hunt:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 });

@@ -1,18 +1,38 @@
 /**
  * Client Bunny Frontend Logic
- * Minimal, Fast, Monochrome UI
+ * Multi-Screen CRM, Hunt Console, and Lead Intelligence
  */
 
 let allLeads = [];
 let currentFilter = 'all';
+let currentCityFilter = 'all';
+let currentScreen = 'leads';
 
 // DOM Elements
-const leadsTbody = document.getElementById('leadsTbody');
-const searchInput = document.getElementById('searchInput');
-const filterPills = document.getElementById('filterPills');
+const sidebarLeadCount = document.getElementById('sidebarLeadCount');
+const breadcrumbTitle = document.getElementById('breadcrumbTitle');
+const headerHuntBtn = document.getElementById('headerHuntBtn');
 const reingestBtn = document.getElementById('reingestBtn');
 const toastEl = document.getElementById('toast');
 
+// Navigation Items
+const navLeads = document.getElementById('navLeads');
+const navHunt = document.getElementById('navHunt');
+const navAnalytics = document.getElementById('navAnalytics');
+
+// Screens
+const screenLeads = document.getElementById('screenLeads');
+const screenHunt = document.getElementById('screenHunt');
+const screenAnalytics = document.getElementById('screenAnalytics');
+
+// Leads Table Elements
+const leadsTbody = document.getElementById('leadsTbody');
+const searchInput = document.getElementById('searchInput');
+const filterPills = document.getElementById('filterPills');
+const cityFilterSelect = document.getElementById('cityFilterSelect');
+const showingCount = document.getElementById('showingCount');
+
+// Stats Elements
 const statTotal = document.getElementById('statTotal');
 const statNoWebsite = document.getElementById('statNoWebsite');
 const statHighTicket = document.getElementById('statHighTicket');
@@ -22,7 +42,15 @@ const countAll = document.getElementById('countAll');
 const countNoWeb = document.getElementById('countNoWeb');
 const countHigh = document.getElementById('countHigh');
 const countRisk = document.getElementById('countRisk');
-const showingCount = document.getElementById('showingCount');
+
+// Hunt Console Elements
+const huntForm = document.getElementById('huntForm');
+const huntCountry = document.getElementById('huntCountry');
+const huntCity = document.getElementById('huntCity');
+const huntNiche = document.getElementById('huntNiche');
+const huntLimit = document.getElementById('huntLimit');
+const jobsList = document.getElementById('jobsList');
+const startHuntSubmitBtn = document.getElementById('startHuntSubmitBtn');
 
 // Drawer Elements
 const leadDrawer = document.getElementById('leadDrawer');
@@ -31,12 +59,78 @@ const closeDrawerBtn = document.getElementById('closeDrawerBtn');
 const drawerTitle = document.getElementById('drawerTitle');
 const drawerBody = document.getElementById('drawerBody');
 
-// 1. Initialize
+// ==========================================================
+// 1. INITIALIZATION & ROUTING
+// ==========================================================
 document.addEventListener('DOMContentLoaded', () => {
+    initNavigation();
+    initHuntChips();
     fetchStats();
+    fetchCities();
     fetchLeads();
+    fetchJobs();
     bindEvents();
 });
+
+function initNavigation() {
+    const navItems = [navLeads, navHunt, navAnalytics];
+
+    navItems.forEach(item => {
+        if (!item) return;
+        item.addEventListener('click', () => {
+            const screen = item.dataset.screen;
+            switchScreen(screen);
+        });
+    });
+
+    if (headerHuntBtn) {
+        headerHuntBtn.addEventListener('click', () => {
+            switchScreen('hunt');
+        });
+    }
+}
+
+function switchScreen(screenName) {
+    currentScreen = screenName;
+
+    // Update active nav button
+    document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+    const targetNav = document.querySelector(`.nav-item[data-screen="${screenName}"]`);
+    if (targetNav) targetNav.classList.add('active');
+
+    // Hide all screens, show target
+    document.querySelectorAll('.screen-view').forEach(s => s.classList.remove('active'));
+
+    if (screenName === 'leads') {
+        screenLeads.classList.add('active');
+        breadcrumbTitle.textContent = 'Leads';
+        fetchLeads();
+    } else if (screenName === 'hunt') {
+        screenHunt.classList.add('active');
+        breadcrumbTitle.textContent = 'Hunt Console';
+        fetchJobs();
+    } else if (screenName === 'analytics') {
+        screenAnalytics.classList.add('active');
+        breadcrumbTitle.textContent = 'Analytics';
+        renderAnalytics();
+    }
+}
+
+function initHuntChips() {
+    // Quick chips for city
+    document.querySelectorAll('#cityChips .chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            huntCity.value = btn.dataset.val;
+        });
+    });
+
+    // Quick chips for niche
+    document.querySelectorAll('#nicheChips .chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            huntNiche.value = btn.dataset.val;
+        });
+    });
+}
 
 function bindEvents() {
     searchInput.addEventListener('input', applyFilters);
@@ -50,6 +144,12 @@ function bindEvents() {
         applyFilters();
     });
 
+    cityFilterSelect.addEventListener('change', (e) => {
+        currentCityFilter = e.target.value;
+        applyFilters();
+    });
+
+    // Sync button
     reingestBtn.addEventListener('click', async () => {
         reingestBtn.disabled = true;
         reingestBtn.textContent = 'Syncing...';
@@ -61,6 +161,7 @@ function bindEvents() {
             if (data.success) {
                 showToast(`✅ Synced! ${data.stats.upserted} leads updated in Supabase.`);
                 await fetchStats();
+                await fetchCities();
                 await fetchLeads();
             } else {
                 showToast('❌ Sync failed: ' + data.error);
@@ -73,17 +174,67 @@ function bindEvents() {
         }
     });
 
+    // Hunt Form Submit
+    huntForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const country = huntCountry.value;
+        const city = huntCity.value.trim();
+        const niche = huntNiche.value.trim();
+        const limit = parseInt(huntLimit.value, 10);
+
+        if (!city || !niche) {
+            showToast('Please enter both city and niche.');
+            return;
+        }
+
+        startHuntSubmitBtn.disabled = true;
+        startHuntSubmitBtn.innerHTML = `<span>⏳ Extracting Leads...</span>`;
+        showToast(`Starting hunt for "${niche}" in ${city}, ${country}...`);
+
+        try {
+            const res = await fetch('/api/hunt/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: niche, city, country, limit })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                showToast(`🎉 Hunt Completed! Extracted ${data.job.total_found} leads in ${city}.`);
+                await fetchStats();
+                await fetchCities();
+                await fetchJobs();
+                
+                // Prompt user to view leads
+                setTimeout(() => {
+                    switchScreen('leads');
+                }, 1200);
+            } else {
+                showToast('❌ Hunt error: ' + data.error);
+            }
+        } catch (err) {
+            showToast('❌ Network error starting hunt');
+        } finally {
+            startHuntSubmitBtn.disabled = false;
+            startHuntSubmitBtn.innerHTML = `<span>🚀 Start Lead Hunt</span>`;
+        }
+    });
+
     closeDrawerBtn.addEventListener('click', closeDrawer);
     drawerOverlay.addEventListener('click', closeDrawer);
 }
 
-// 2. Fetch Stats
+// ==========================================================
+// 2. DATA FETCHING
+// ==========================================================
 async function fetchStats() {
     try {
         const res = await fetch('/api/stats');
         const data = await res.json();
         if (data.success && data.stats) {
-            statTotal.textContent = data.stats.total_leads || 0;
+            const total = data.stats.total_leads || 0;
+            statTotal.textContent = total;
+            sidebarLeadCount.textContent = total;
             statNoWebsite.textContent = data.stats.no_website_count || 0;
             statHighTicket.textContent = data.stats.high_ticket_count || 0;
             statRepRisk.textContent = data.stats.low_rating_count || 0;
@@ -93,10 +244,28 @@ async function fetchStats() {
     }
 }
 
-// 3. Fetch Leads
+async function fetchCities() {
+    try {
+        const res = await fetch('/api/cities');
+        const data = await res.json();
+        if (data.success && data.cities) {
+            cityFilterSelect.innerHTML = `<option value="all">All Locations</option>`;
+            data.cities.forEach(city => {
+                const opt = document.createElement('option');
+                opt.value = city;
+                opt.textContent = `${city}, Pakistan`;
+                if (city === 'Lahore') opt.selected = true;
+                cityFilterSelect.appendChild(opt);
+            });
+        }
+    } catch (err) {
+        console.error('Error fetching cities:', err);
+    }
+}
+
 async function fetchLeads() {
     try {
-        const res = await fetch('/api/leads?limit=100');
+        const res = await fetch('/api/leads?limit=150');
         const data = await res.json();
         if (data.success) {
             allLeads = data.leads;
@@ -108,7 +277,54 @@ async function fetchLeads() {
     }
 }
 
-// 4. Update Filter Tab Counts
+async function fetchJobs() {
+    try {
+        const res = await fetch('/api/jobs');
+        const data = await res.json();
+        if (data.success && data.jobs) {
+            renderJobs(data.jobs);
+        }
+    } catch (err) {
+        jobsList.innerHTML = `<div class="table-loading">Failed to load jobs history.</div>`;
+    }
+}
+
+function renderJobs(jobs) {
+    if (!jobs || jobs.length === 0) {
+        jobsList.innerHTML = `<div class="table-loading">No hunt sessions yet. Configure parameters above to start.</div>`;
+        return;
+    }
+
+    jobsList.innerHTML = jobs.map(j => {
+        const dateStr = new Date(j.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+        const isComp = j.status === 'completed';
+
+        return `
+            <div class="job-item">
+                <div>
+                    <div class="job-query">${escapeHtml(j.query)}</div>
+                    <div class="job-meta">
+                        <span>${j.city}</span> • <span>${dateStr}</span> • <span><strong>${j.total_found || 0}</strong> leads extracted</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="job-status-pill ${isComp ? 'job-status-completed' : 'job-status-running'}">
+                        ${j.status.toUpperCase()}
+                    </span>
+                    ${isComp ? `
+                        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="switchScreen('leads')">
+                            View Leads
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ==========================================================
+// 3. TABLE FILTERING & RENDERING
+// ==========================================================
 function updateFilterCounts() {
     let noWeb = 0;
     let high = 0;
@@ -127,11 +343,15 @@ function updateFilterCounts() {
     countRisk.textContent = risk;
 }
 
-// 5. Apply Search & Active Filter
 function applyFilters() {
     const query = searchInput.value.toLowerCase().trim();
 
     const filtered = allLeads.filter(lead => {
+        // Location filter
+        if (currentCityFilter !== 'all') {
+            if ((lead.city || '').toLowerCase() !== currentCityFilter.toLowerCase()) return false;
+        }
+
         const pts = getPainPoints(lead);
 
         // Filter tab match
@@ -163,7 +383,6 @@ function getPainPoints(lead) {
     }
 }
 
-// 6. Render Table
 function renderTable(leads) {
     showingCount.textContent = `Showing ${leads.length} of ${allLeads.length} leads`;
 
@@ -218,7 +437,9 @@ function renderTable(leads) {
     }).join('');
 }
 
-// 7. Drawer Details
+// ==========================================================
+// 4. DRAWER & ENRICHMENT ACTIONS
+// ==========================================================
 async function openLeadDetail(leadId) {
     try {
         const res = await fetch(`/api/leads/${leadId}`);
@@ -255,6 +476,8 @@ async function openLeadDetail(leadId) {
                         ? lead.decision_makers.map(dm => `
                             <div><strong>${escapeHtml(dm.full_name)}</strong> (${escapeHtml(dm.title_role || 'Owner')})</div>
                             ${dm.email ? `<div>Email: <a href="mailto:${escapeHtml(dm.email)}" class="web-link">${escapeHtml(dm.email)}</a></div>` : ''}
+                            ${dm.linkedin_url ? `<div>LinkedIn: <a href="${escapeHtml(dm.linkedin_url)}" target="_blank" class="web-link">View Profile</a></div>` : ''}
+                            ${dm.facebook_url ? `<div>Facebook: <a href="${escapeHtml(dm.facebook_url)}" target="_blank" class="web-link">View Page</a></div>` : ''}
                             ${dm.phone ? `<div>Phone: ${escapeHtml(dm.phone)}</div>` : ''}
                         `).join('<hr style="margin: 8px 0; border: none; border-top: 1px solid var(--border-light);"/>')
                         : '<div style="color: var(--text-secondary);">No contacts discovered yet. Ready for Website Crawler & Dork Resolver.</div>'}
@@ -287,35 +510,6 @@ async function openLeadDetail(leadId) {
     }
 }
 
-async function triggerDork(leadId) {
-    const btn = document.getElementById(`dorkBtn_${leadId}`);
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Running Dork Search...';
-    }
-    showToast('Running zero-cost dorks on Google/Search...');
-
-    try {
-        const res = await fetch(`/api/leads/${leadId}/dork`, { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-            const count = (data.dorkResult.linkedinProfiles.length + data.dorkResult.facebookUrls.length);
-            showToast(`✅ Dork complete! Found ${count} public profiles.`);
-            await openLeadDetail(leadId); // Refresh drawer
-            await fetchLeads(); // Refresh table status
-        } else {
-            showToast('❌ Dork error: ' + data.error);
-        }
-    } catch (err) {
-        showToast('❌ Network error during dork resolution');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = '🕵️ Google Dork for Owner (Module 4)';
-        }
-    }
-}
-
 async function triggerCrawl(leadId) {
     const btn = document.getElementById(`crawlBtn_${leadId}`);
     if (btn) {
@@ -330,8 +524,8 @@ async function triggerCrawl(leadId) {
         if (data.success) {
             const foundCount = (data.crawlResult.emails.length + data.crawlResult.doctor_names.length);
             showToast(`✅ Crawl finished! Found ${foundCount} contact points.`);
-            await openLeadDetail(leadId); // Refresh drawer
-            await fetchLeads(); // Refresh table status
+            await openLeadDetail(leadId);
+            await fetchLeads();
         } else {
             showToast('❌ Crawl error: ' + data.error);
         }
@@ -345,12 +539,77 @@ async function triggerCrawl(leadId) {
     }
 }
 
+async function triggerDork(leadId) {
+    const btn = document.getElementById(`dorkBtn_${leadId}`);
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Running Dork Search...';
+    }
+    showToast('Running zero-cost dorks on Google/Search...');
+
+    try {
+        const res = await fetch(`/api/leads/${leadId}/dork`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            const count = (data.dorkResult.linkedinProfiles.length + data.dorkResult.facebookUrls.length);
+            showToast(`✅ Dork complete! Found ${count} public profiles.`);
+            await openLeadDetail(leadId);
+            await fetchLeads();
+        } else {
+            showToast('❌ Dork error: ' + data.error);
+        }
+    } catch (err) {
+        showToast('❌ Network error during dork resolution');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🕵️ Google Dork for Owner (Module 4)';
+        }
+    }
+}
+
 function closeDrawer() {
     leadDrawer.classList.remove('open');
     drawerOverlay.classList.remove('open');
 }
 
-// 8. Utilities
+// ==========================================================
+// 5. ANALYTICS
+// ==========================================================
+function renderAnalytics() {
+    const oppList = document.getElementById('analyticsOpportunityList');
+    if (!oppList) return;
+
+    let noWeb = 0;
+    let high = 0;
+    let risk = 0;
+
+    allLeads.forEach(lead => {
+        const pts = getPainPoints(lead);
+        if (pts.includes('no_website')) noWeb++;
+        if (pts.includes('high_ticket_spender')) high++;
+        if (pts.includes('reputation_risk')) risk++;
+    });
+
+    oppList.innerHTML = `
+        <div class="opportunity-item">
+            <span>Website Development Targets (Zero Website)</span>
+            <strong>${noWeb} clinics</strong>
+        </div>
+        <div class="opportunity-item">
+            <span>High-Ticket Retainer Candidates (150+ Reviews)</span>
+            <strong>${high} clinics</strong>
+        </div>
+        <div class="opportunity-item">
+            <span>Reputation Management Risk (1-star Reviews)</span>
+            <strong>${risk} clinics</strong>
+        </div>
+    `;
+}
+
+// ==========================================================
+// 6. UTILITIES
+// ==========================================================
 function formatPainPoint(code) {
     switch (code) {
         case 'no_website': return 'No Website';

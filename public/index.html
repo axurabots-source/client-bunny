@@ -3,113 +3,310 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Client Bunny — Lead Intelligence</title>
+    <title>Client Bunny — Lead Intelligence & CRM</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    <!-- Top Navigation -->
-    <header class="header">
-        <div class="header-inner">
+<body class="crm-body">
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-top">
             <div class="brand">
                 <span class="brand-badge">CLIENT BUNNY</span>
-                <span class="pipeline-tag">Phase 1 Pipeline</span>
+                <span class="brand-ver">v1.0</span>
             </div>
+            <div class="cloud-pill">
+                <span class="status-dot"></span>
+                <span>Supabase Cloud</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">WORKSPACE</div>
+            <button class="nav-item active" data-screen="leads" id="navLeads">
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">Leads</span>
+                <span class="nav-count" id="sidebarLeadCount">0</span>
+            </button>
+            <button class="nav-item" data-screen="hunt" id="navHunt">
+                <span class="nav-icon">🎯</span>
+                <span class="nav-text">Hunt</span>
+                <span class="nav-badge">NEW</span>
+            </button>
+            <button class="nav-item" data-screen="analytics" id="navAnalytics">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Analytics</span>
+            </button>
+        </nav>
+
+        <div class="sidebar-bottom">
+            <div class="system-meta">
+                <div class="meta-row"><span>Engine:</span> <strong>Obscura Go</strong></div>
+                <div class="meta-row"><span>Port:</span> <strong>localhost:3005</strong></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CRM CONTENT AREA -->
+    <div class="crm-main">
+        
+        <!-- TOP APP HEADER -->
+        <header class="app-header">
+            <div class="header-breadcrumb">
+                <span class="bc-root">Workspace</span>
+                <span class="bc-sep">/</span>
+                <span class="bc-current" id="breadcrumbTitle">Leads</span>
+            </div>
+
             <div class="header-actions">
-                <div class="db-status">
-                    <span class="status-dot"></span>
-                    <span class="status-label">Supabase Cloud</span>
-                </div>
-                <button id="reingestBtn" class="btn btn-secondary">
+                <!-- Header Hunt Shortcut Button -->
+                <button class="btn btn-primary" id="headerHuntBtn">
+                    <span>🎯 Launch Hunt</span>
+                </button>
+                <button class="btn btn-secondary" id="reingestBtn">
                     <span>Sync dentists.csv</span>
                 </button>
             </div>
+        </header>
+
+        <!-- SCREEN 1: LEADS PIPELINE -->
+        <div class="screen-view active" id="screenLeads">
+            <div class="screen-container">
+                
+                <!-- Hero Section -->
+                <section class="section-hero">
+                    <div class="hero-left">
+                        <h1 class="page-title">Leads Pipeline</h1>
+                        <p class="page-subtitle">Extracted business records enriched with pain points, contact info, and website health.</p>
+                    </div>
+                    <div class="hero-right">
+                        <!-- Dynamic City Filter Dropdown -->
+                        <div class="city-selector-box">
+                            <label for="cityFilterSelect">Location:</label>
+                            <select id="cityFilterSelect" class="select-input">
+                                <option value="all">All Locations</option>
+                                <option value="Lahore" selected>Lahore, Pakistan</option>
+                            </select>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Metrics Strip -->
+                <section class="metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-label">TOTAL LEADS</span>
+                        <div class="metric-value" id="statTotal">—</div>
+                        <span class="metric-sub">In Supabase DB</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">NO WEBSITE</span>
+                        <div class="metric-value highlight" id="statNoWebsite">—</div>
+                        <span class="metric-sub">Immediate web targets</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">HIGH SPENDERS</span>
+                        <div class="metric-value" id="statHighTicket">—</div>
+                        <span class="metric-sub">150+ reviews, high budget</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">REPUTATION RISKS</span>
+                        <div class="metric-value" id="statRepRisk">—</div>
+                        <span class="metric-sub">1-star complaints detected</span>
+                    </div>
+                </section>
+
+                <!-- Table Controls -->
+                <section class="controls-bar">
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="searchInput" placeholder="Search clinics by name, address, or phone...">
+                    </div>
+                    <div class="filter-pills" id="filterPills">
+                        <button class="filter-btn active" data-filter="all">All (<span id="countAll">0</span>)</button>
+                        <button class="filter-btn" data-filter="no_website">No Website (<span id="countNoWeb">0</span>)</button>
+                        <button class="filter-btn" data-filter="high_ticket_spender">High Spenders (<span id="countHigh">0</span>)</button>
+                        <button class="filter-btn" data-filter="reputation_risk">Reputation Risk (<span id="countRisk">0</span>)</button>
+                    </div>
+                </section>
+
+                <!-- Leads Table -->
+                <section class="table-card">
+                    <div class="table-container">
+                        <table class="leads-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 28%;">CLINIC / BUSINESS</th>
+                                    <th style="width: 14%;">REPUTATION</th>
+                                    <th style="width: 22%;">ONLINE PRESENCE</th>
+                                    <th style="width: 24%;">DETECTED PAIN POINTS</th>
+                                    <th style="width: 12%; text-align: right;">ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leadsTbody">
+                                <tr>
+                                    <td colspan="5" class="table-loading">Loading leads from Supabase...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="table-footer">
+                        <span id="showingCount">Showing 0 of 0 leads</span>
+                    </div>
+                </section>
+
+            </div>
         </div>
-    </header>
 
-    <!-- Main Container -->
-    <main class="main-container">
-        
-        <!-- Hero & Overview Header -->
-        <section class="section-hero">
-            <div class="hero-left">
-                <h1 class="page-title">Lead Pipeline & Pain-Point Radar</h1>
-                <p class="page-subtitle">Targeted Google Maps intelligence enriched with automated buyer pain-points and contact discovery.</p>
-            </div>
-            <div class="hero-right">
-                <div class="city-pill">📍 Lahore, Pakistan</div>
-            </div>
-        </section>
+        <!-- SCREEN 2: HUNT CONSOLE (NEW TARGET SELECTION) -->
+        <div class="screen-view" id="screenHunt">
+            <div class="screen-container">
+                
+                <section class="section-hero">
+                    <div>
+                        <h1 class="page-title">Hunt Launchpad</h1>
+                        <p class="page-subtitle">Configure search parameters to extract fresh high-intent business leads across countries & cities.</p>
+                    </div>
+                </section>
 
-        <!-- Metrics Strip -->
-        <section class="metrics-grid">
-            <div class="metric-card">
-                <span class="metric-label">TOTAL LEADS</span>
-                <div class="metric-value" id="statTotal">—</div>
-                <span class="metric-sub">Ingested to database</span>
-            </div>
-            <div class="metric-card">
-                <span class="metric-label">NO WEBSITE</span>
-                <div class="metric-value highlight" id="statNoWebsite">—</div>
-                <span class="metric-sub">Immediate web design targets</span>
-            </div>
-            <div class="metric-card">
-                <span class="metric-label">HIGH SPENDERS</span>
-                <div class="metric-value" id="statHighTicket">—</div>
-                <span class="metric-sub">150+ reviews, top patient flow</span>
-            </div>
-            <div class="metric-card">
-                <span class="metric-label">REPUTATION RISKS</span>
-                <div class="metric-value" id="statRepRisk">—</div>
-                <span class="metric-sub">Recent 1-star patient complaints</span>
-            </div>
-        </section>
+                <div class="hunt-grid">
+                    <!-- Left: Hunt Form -->
+                    <div class="hunt-panel card-border">
+                        <div class="panel-header">
+                            <span class="panel-tag">HUNT PARAMETERS</span>
+                            <h3 class="panel-title">Target Business Profile</h3>
+                        </div>
 
-        <!-- Filter & Search Controls -->
-        <section class="controls-bar">
-            <div class="search-box">
-                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input type="text" id="searchInput" placeholder="Search clinics by name, address, or phone...">
-            </div>
-            <div class="filter-pills" id="filterPills">
-                <button class="filter-btn active" data-filter="all">All (<span id="countAll">0</span>)</button>
-                <button class="filter-btn" data-filter="no_website">No Website (<span id="countNoWeb">0</span>)</button>
-                <button class="filter-btn" data-filter="high_ticket_spender">High Spenders (<span id="countHigh">0</span>)</button>
-                <button class="filter-btn" data-filter="reputation_risk">Reputation Risk (<span id="countRisk">0</span>)</button>
-            </div>
-        </section>
+                        <form id="huntForm" class="hunt-form">
+                            <!-- Country Selection -->
+                            <div class="form-group">
+                                <label for="huntCountry">TARGET COUNTRY</label>
+                                <select id="huntCountry" class="form-input">
+                                    <option value="Pakistan" selected>Pakistan</option>
+                                    <option value="United States">United States</option>
+                                    <option value="United Kingdom">United Kingdom</option>
+                                    <option value="United Arab Emirates">United Arab Emirates</option>
+                                    <option value="Canada">Canada</option>
+                                    <option value="Saudi Arabia">Saudi Arabia</option>
+                                    <option value="Australia">Australia</option>
+                                </select>
+                            </div>
 
-        <!-- Leads Data Table -->
-        <section class="table-card">
-            <div class="table-container">
-                <table class="leads-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 28%;">CLINIC / BUSINESS</th>
-                            <th style="width: 14%;">REPUTATION</th>
-                            <th style="width: 22%;">ONLINE PRESENCE</th>
-                            <th style="width: 24%;">DETECTED PAIN POINTS</th>
-                            <th style="width: 12%; text-align: right;">ACTION</th>
-                        </tr>
-                    </thead>
-                    <tbody id="leadsTbody">
-                        <tr>
-                            <td colspan="5" class="table-loading">Loading leads from Supabase...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="table-footer">
-                <span id="showingCount">Showing 0 of 0 leads</span>
-            </div>
-        </section>
+                            <!-- City Selection -->
+                            <div class="form-group">
+                                <label for="huntCity">TARGET CITY / REGION</label>
+                                <input type="text" id="huntCity" class="form-input" placeholder="e.g. Lahore, Karachi, Islamabad..." value="Lahore" required>
+                                <div class="quick-chips" id="cityChips">
+                                    <button type="button" class="chip" data-val="Lahore">Lahore</button>
+                                    <button type="button" class="chip" data-val="Karachi">Karachi</button>
+                                    <button type="button" class="chip" data-val="Islamabad">Islamabad</button>
+                                    <button type="button" class="chip" data-val="Dubai">Dubai</button>
+                                    <button type="button" class="chip" data-val="London">London</button>
+                                    <button type="button" class="chip" data-val="New York">New York</button>
+                                </div>
+                            </div>
 
-    </main>
+                            <!-- Niche / Category -->
+                            <div class="form-group">
+                                <label for="huntNiche">BUSINESS NICHE / KEYWORD</label>
+                                <input type="text" id="huntNiche" class="form-input" placeholder="e.g. Dentists, Dermatologists, Gyms..." value="Dentists" required>
+                                <div class="quick-chips" id="nicheChips">
+                                    <button type="button" class="chip" data-val="Dentists">Dentists</button>
+                                    <button type="button" class="chip" data-val="Dermatologists">Dermatologists</button>
+                                    <button type="button" class="chip" data-val="Plastic Surgeons">Plastic Surgeons</button>
+                                    <button type="button" class="chip" data-val="Gyms">Gyms</button>
+                                    <button type="button" class="chip" data-val="Real Estate">Real Estate</button>
+                                </div>
+                            </div>
+
+                            <!-- Target Limit -->
+                            <div class="form-row">
+                                <div class="form-group half">
+                                    <label for="huntLimit">TARGET QUANTITY</label>
+                                    <select id="huntLimit" class="form-input">
+                                        <option value="20" selected>20 Leads (Fast MVP)</option>
+                                        <option value="50">50 Leads</option>
+                                        <option value="100">100 Leads (Deep Extraction)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group half">
+                                    <label for="huntEngine">SCRAPING ENGINE</label>
+                                    <select id="huntEngine" class="form-input">
+                                        <option value="obscura" selected>Google Maps (Obscura)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Submit CTA -->
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary btn-large" id="startHuntSubmitBtn">
+                                    <span>🚀 Start Lead Hunt</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Right: Active Jobs History -->
+                    <div class="hunt-panel card-border">
+                        <div class="panel-header">
+                            <span class="panel-tag">EXTRACTION LOG</span>
+                            <h3 class="panel-title">Hunt Sessions & History</h3>
+                        </div>
+
+                        <div class="jobs-list" id="jobsList">
+                            <div class="table-loading">Loading hunt history from Supabase...</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- SCREEN 3: ANALYTICS (SUMMARY OVERVIEW) -->
+        <div class="screen-view" id="screenAnalytics">
+            <div class="screen-container">
+                <section class="section-hero">
+                    <div>
+                        <h1 class="page-title">Pipeline Analytics</h1>
+                        <p class="page-subtitle">High-level distribution of business health, digital presence, and conversion opportunities.</p>
+                    </div>
+                </section>
+
+                <div class="analytics-grid">
+                    <div class="analytics-card card-border">
+                        <span class="metric-label">OPPORTUNITY BREAKDOWN</span>
+                        <div class="opportunity-list" id="analyticsOpportunityList">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="analytics-card card-border">
+                        <span class="metric-label">DATA HYGIENE</span>
+                        <div class="hygiene-box">
+                            <div class="hygiene-row">
+                                <span>Database Engine</span>
+                                <strong>Supabase (PostgreSQL 15)</strong>
+                            </div>
+                            <div class="hygiene-row">
+                                <span>De-duplication Key</span>
+                                <strong>Google Maps place_id</strong>
+                            </div>
+                            <div class="hygiene-row">
+                                <span>Enrichment Modules Active</span>
+                                <strong>Website Crawler + Google Dorks</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
 
     <!-- Slide-over Lead Detail Drawer -->
     <div class="drawer-overlay" id="drawerOverlay"></div>
