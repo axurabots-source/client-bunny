@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const { analyzePainPoints } = require('./painPointTagger');
+const { formatDirectMapsLink } = require('../m2_gmb_integration/mapsHelper');
 require('dotenv').config();
 
 const pool = new Pool({
@@ -54,7 +55,9 @@ class LeadRepository {
             parseInt(leadData.review_count, 10) || 0,
             parseFloat(leadData.review_rating) || 0.0,
             leadData.gmb_owner_name || null,
-            leadData.link || leadData.gmb_link || null,
+            (leadData.link && leadData.link.includes('/maps/place/')) 
+                ? leadData.link 
+                : formatDirectMapsLink(leadData),
             JSON.stringify(painPoints),
             JSON.stringify(leadData.raw_data || {}),
             leadData.list_name || 'General Ingestion',

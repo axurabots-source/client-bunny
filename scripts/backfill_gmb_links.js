@@ -1,14 +1,28 @@
 const { pool } = require('../modules/m1_storage/leadRepository');
+const { formatDirectMapsLink } = require('../modules/m2_gmb_integration/mapsHelper');
 
 async function backfill() {
-    const res = await pool.query("SELECT id, title, city, district_area, country, gmb_link FROM leads WHERE gmb_link IS NULL OR gmb_link = ''");
-    console.log(`Leads needing Google Maps link: ${res.rows.length}`);
+    console.log("🔍 Checking leads for Google Maps link standardization...");
+    const res = await pool.query(`
+        SELECT id, place_id, title, city, district_area, country, gmb_link, raw_data 
+        FROM leads
+    `);
+    
+    console.log(`Total leads in database: ${res.rows.length}`);
+    let updatedCount = 0;
+
     for (const r of res.rows) {
-        const query = `${r.title} ${r.district_area ? r.district_area + ' ' : ''}${r.city || ''} ${r.country || ''}`.trim();
-        const link = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-        await pool.query('UPDATE leads SET gmb_link = $1 WHERE id = $2', [link, r.id]);
+        const isSearchLink = r.gmb_link && r.gmb_link.includes('/maps/search/');
+        const isMissing = !r.gmb_link || r.gmb_link.trim() === '';
+
+        if (isMissing || isSearchLink) {
+            const directLink = formatDirectMapsLink(r);
+            await pool.query('UPDATE leads SET gmb_link = $1 WHERE id = $2', [directLink, r.id]);
+            updatedCount++;
+        }
     }
-    console.log('✅ All leads in Supabase now have a verified Google Maps link!');
+
+    console.log(`✅ Successfully updated ${updatedCount} leads to direct Google Maps place profile links!`);
     process.exit(0);
 }
 

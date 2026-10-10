@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const { pool, LeadRepository } = require('../m1_storage/leadRepository');
 const { tagPainPoints } = require('../m1_storage/painPointTagger');
+const { formatDirectMapsLink } = require('./mapsHelper');
 
 /**
  * Country Phone Prefix Map
@@ -68,7 +69,7 @@ function generateLocalFallbacks(niche, country, state, city, area, count = 10) {
             review_count: randomReviews,
             review_rating: parseFloat(randomRating),
             gmb_owner_name: `Dr. ${prefix} Specialist`,
-            gmb_link: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${title} ${area ? area + ' ' : ''}${city} ${country}`)}`,
+            gmb_link: formatDirectMapsLink({ title, address, district_area: area, city, country }),
             raw_data: { source: 'live_hunt_engine', area, city, country }
         });
     }
@@ -160,7 +161,7 @@ async function executeLiveHunt({ listName, country, state, city, area, niche, li
                     review_count: cleanReviews,
                     review_rating: parseFloat(cleanRating),
                     gmb_owner_name: null,
-                    gmb_link: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${c.title} ${area ? area + ' ' : ''}${city} ${country}`)}`,
+                    gmb_link: formatDirectMapsLink({ title: c.title, address: `${area ? area + ', ' : ''}${city}, ${country}`, district_area: area, city, country }),
                     raw_data: { snippet: c.snippet, source: 'live_search' }
                 });
             }

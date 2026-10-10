@@ -1,6 +1,7 @@
 const fs = require('fs');
 const { parse } = require('csv-parse');
 const { LeadRepository } = require('../m1_storage/leadRepository');
+const { formatDirectMapsLink } = require('./mapsHelper');
 
 /**
  * Clean Owner string from GMB
@@ -108,7 +109,15 @@ async function ingestGmbCsv(filePath) {
                             review_count: parseInt(row.review_count, 10) || 0,
                             review_rating: parseFloat(row.review_rating) || 0.0,
                             gmb_owner_name: ownerClean,
-                            link: row.link || row.reviews_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${title} ${city}`)}`,
+                            link: (row.link && row.link.includes('/maps/place/')) ? row.link : formatDirectMapsLink({
+                                place_id: placeId,
+                                cid: row.cid,
+                                title: title,
+                                address: row.address,
+                                city: city,
+                                country: 'Pakistan',
+                                gmb_link: row.link
+                            }),
                             user_reviews: row.user_reviews || null,
                             raw_data: {
                                 plus_code: row.plus_code,

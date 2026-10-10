@@ -738,6 +738,34 @@ function updateFilterCounts() {
     countRisk.textContent = allLeads.filter(l => (l.pain_points || []).includes('reputation_risk')).length;
 }
 
+function getDirectMapsUrl(lead) {
+    if (!lead) return '#';
+    // 1. Official Google Place ID
+    if (lead.place_id && typeof lead.place_id === 'string' && lead.place_id.startsWith('ChIJ')) {
+        return `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(lead.place_id)}`;
+    }
+    // 2. Direct place/share link
+    if (lead.gmb_link && typeof lead.gmb_link === 'string') {
+        if ((lead.gmb_link.includes('/maps/place/') || lead.gmb_link.includes('maps.app.goo.gl') || lead.gmb_link.includes('cid=')) && !lead.gmb_link.includes('/maps/search/')) {
+            return lead.gmb_link;
+        }
+    }
+    // 3. Fallback direct place entity canonical link
+    const title = (lead.title || '').replace(/[\/\\]/g, ' ').replace(/\s+/g, ' ').trim();
+    const locParts = [];
+    if (lead.district_area && !title.toLowerCase().includes(lead.district_area.toLowerCase())) {
+        locParts.push(lead.district_area);
+    }
+    if (lead.city && !title.toLowerCase().includes(lead.city.toLowerCase())) {
+        locParts.push(lead.city);
+    }
+    if (lead.country && !title.toLowerCase().includes(lead.country.toLowerCase())) {
+        locParts.push(lead.country);
+    }
+    const query = locParts.length > 0 ? `${title}, ${locParts.join(', ')}` : title;
+    return `https://www.google.com/maps/place/${encodeURIComponent(query)}/`;
+}
+
 function renderTable(leads) {
     showingCount.textContent = `Showing ${leads.length} of ${allLeads.length} leads`;
 
@@ -758,7 +786,7 @@ function renderTable(leads) {
         const reviews = lead.review_count || 0;
         const district = lead.district_area ? `${lead.district_area}, ` : '';
         const city = lead.city || 'Lahore';
-        const mapsUrl = lead.gmb_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.title} ${lead.district_area ? lead.district_area + ' ' : ''}${lead.city || ''} ${lead.country || ''}`.trim())}`;
+        const mapsUrl = getDirectMapsUrl(lead);
 
         return `
             <tr onclick="openLeadDetail(${lead.id})">
@@ -834,7 +862,7 @@ window.openLeadDetail = async function(id) {
 
 function renderDrawerContent(lead) {
     drawerTitle.textContent = lead.title;
-    const mapsUrl = lead.gmb_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.title} ${lead.district_area ? lead.district_area + ' ' : ''}${lead.city || ''} ${lead.country || ''}`.trim())}`;
+    const mapsUrl = getDirectMapsUrl(lead);
 
     const dms = lead.decision_makers || [];
     const dmHtml = dms.length === 0 
