@@ -540,13 +540,42 @@ body.crm-body.sidebar-collapsed .crm-main {
 .lead-title-box {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
+}
+
+.lead-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .lead-name {
     font-weight: 600;
     font-size: 14px;
     color: var(--text-primary);
+}
+
+.maps-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 2px 7px;
+    text-decoration: none;
+    transition: var(--transition);
+    line-height: 1.2;
+}
+
+.maps-badge:hover {
+    color: var(--text-primary);
+    border-color: var(--border-dark);
+    background: #FFFFFF;
 }
 
 .lead-category {

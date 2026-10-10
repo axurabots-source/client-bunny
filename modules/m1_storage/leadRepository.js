@@ -34,6 +34,7 @@ class LeadRepository {
                 review_rating = EXCLUDED.review_rating,
                 pain_points = EXCLUDED.pain_points,
                 raw_data = EXCLUDED.raw_data,
+                gmb_link = COALESCE(EXCLUDED.gmb_link, leads.gmb_link),
                 list_name = COALESCE(EXCLUDED.list_name, leads.list_name),
                 country = COALESCE(EXCLUDED.country, leads.country),
                 state_province = COALESCE(EXCLUDED.state_province, leads.state_province),

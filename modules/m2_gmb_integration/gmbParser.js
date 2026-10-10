@@ -108,7 +108,7 @@ async function ingestGmbCsv(filePath) {
                             review_count: parseInt(row.review_count, 10) || 0,
                             review_rating: parseFloat(row.review_rating) || 0.0,
                             gmb_owner_name: ownerClean,
-                            link: row.link || row.reviews_link || '',
+                            link: row.link || row.reviews_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${title} ${city}`)}`,
                             user_reviews: row.user_reviews || null,
                             raw_data: {
                                 plus_code: row.plus_code,

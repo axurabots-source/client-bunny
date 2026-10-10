@@ -718,12 +718,23 @@ function renderTable(leads) {
         const reviews = lead.review_count || 0;
         const district = lead.district_area ? `${lead.district_area}, ` : '';
         const city = lead.city || 'Lahore';
+        const mapsUrl = lead.gmb_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.title} ${lead.district_area ? lead.district_area + ' ' : ''}${lead.city || ''} ${lead.country || ''}`.trim())}`;
 
         return `
             <tr onclick="openLeadDetail(${lead.id})">
                 <td>
                     <div class="lead-title-box">
-                        <span class="lead-name">${escapeHtml(lead.title)}</span>
+                        <div class="lead-title-row">
+                            <span class="lead-name">${escapeHtml(lead.title)}</span>
+                            <a href="${mapsUrl}" target="_blank" class="maps-badge" title="Verify listing on Google Maps" onclick="event.stopPropagation();">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                    <circle cx="12" cy="10" r="3"></circle>
+                                </svg>
+                                <span>Maps</span>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            </a>
+                        </div>
                         <span class="lead-category">${escapeHtml(lead.category || 'Local Business')} • <span style="color: #71717A;">${escapeHtml(lead.list_name || 'General')}</span></span>
                     </div>
                 </td>
@@ -783,6 +794,7 @@ window.openLeadDetail = async function(id) {
 
 function renderDrawerContent(lead) {
     drawerTitle.textContent = lead.title;
+    const mapsUrl = lead.gmb_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.title} ${lead.district_area ? lead.district_area + ' ' : ''}${lead.city || ''} ${lead.country || ''}`.trim())}`;
 
     const dms = lead.decision_makers || [];
     const dmHtml = dms.length === 0 
@@ -806,7 +818,14 @@ function renderDrawerContent(lead) {
     drawerBody.innerHTML = `
         <div class="detail-section">
             <span class="detail-heading">ACTIONS & ENRICHMENT TOOLS</span>
-            <div style="display: flex; gap: 10px; margin-top: 6px;">
+            <div style="display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;">
+                <a href="${mapsUrl}" target="_blank" class="btn btn-secondary" style="text-decoration: none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span>View on Google Maps</span>
+                </a>
                 <button class="btn btn-secondary" id="crawlBtn" onclick="triggerCrawl(${lead.id})" ${!lead.website ? 'disabled' : ''}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -836,6 +855,13 @@ function renderDrawerContent(lead) {
                 <div><strong>Phone:</strong> ${escapeHtml(lead.phone || 'N/A')}</div>
                 <div><strong>Website:</strong> ${lead.website ? `<a href="${lead.website}" target="_blank" class="web-link">${escapeHtml(lead.website)}</a>` : '<span style="color: #71717A;">None (Pain Point)</span>'}</div>
                 <div><strong>Reputation:</strong> ★ ${lead.review_rating || 0} (${lead.review_count || 0} reviews)</div>
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
+                    <strong>Google Maps Source:</strong>
+                    <a href="${mapsUrl}" target="_blank" class="web-link" style="display: inline-flex; align-items: center; gap: 4px;">
+                        <span>Verify Live on Maps</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    </a>
+                </div>
             </div>
         </div>
 
@@ -847,6 +873,7 @@ function renderDrawerContent(lead) {
         </div>
     `;
 }
+
 
 window.triggerCrawl = async function(id) {
     const btn = document.getElementById('crawlBtn');
