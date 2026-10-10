@@ -583,7 +583,8 @@ function bindEvents() {
         const city = huntCity.value === '__custom__' ? (customAreaInput.value || 'Central') : huntCity.value;
         const area = huntArea.value === '__custom__' ? customAreaInput.value.trim() : huntArea.value;
         const niche = huntNiche.value.trim();
-        const limit = parseInt(huntLimit.value, 10) || 20;
+        let limit = parseInt(huntLimit.value, 10) || 35;
+        if (limit > 45) limit = 45; // Enforce anti-ban cap max 45
 
         if (!city || !niche) {
             showToast('Please provide City and Niche.');

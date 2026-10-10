@@ -78,11 +78,12 @@ function generateLocalFallbacks(niche, country, state, city, area, count = 10) {
 /**
  * Execute Live Playwright Hunt for Target Area & Niche
  */
-async function executeLiveHunt({ listName, country, state, city, area, niche, limit = 20 }) {
+async function executeLiveHunt({ listName, country, state, city, area, niche, limit = 35 }) {
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 35, 10), 45);
     const fullQuery = `${niche} in ${area ? area + ', ' : ''}${city}, ${country}`;
     console.log(`\n======================================================`);
     console.log(`🎯 STARTING LIVE HUNT: "${fullQuery}"`);
-    console.log(`   Target List: "${listName}" | Limit: ${limit}`);
+    console.log(`   Target List: "${listName}" | Limit: ${safeLimit} (Capped at 45)`);
     console.log(`======================================================`);
 
     let extractedLeads = [];
@@ -171,9 +172,9 @@ async function executeLiveHunt({ listName, country, state, city, area, niche, li
     }
 
     // If live search returned fewer than minimum target, supplement with precise localized targets
-    if (extractedLeads.length < Math.min(limit, 8)) {
+    if (extractedLeads.length < Math.min(safeLimit, 8)) {
         console.log(`⚡ Generating precision verified localized targets for ${area || city}...`);
-        const needed = limit - extractedLeads.length;
+        const needed = safeLimit - extractedLeads.length;
         const fallbacks = generateLocalFallbacks(niche, country, state, city, area, needed);
         extractedLeads = [...extractedLeads, ...fallbacks];
     }

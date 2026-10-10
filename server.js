@@ -175,12 +175,17 @@ app.post('/api/hunt/start', async (req, res) => {
             city = 'Lahore',
             area = '',
             niche = 'Dentists',
-            limit = 20
+            limit = 35
         } = req.body;
 
         if (!city || !niche) {
             return res.status(400).json({ success: false, error: 'City and Niche are required' });
         }
+
+        // Anti-ban safety guard: hard cap at 45 leads max
+        let cappedLimit = parseInt(limit, 10) || 35;
+        if (cappedLimit > 45) cappedLimit = 45;
+        if (cappedLimit < 15) cappedLimit = 15;
 
         const jobId = `hunt_${Date.now()}`;
         const fullQuery = `${niche} in ${area ? area + ', ' : ''}${city}, ${country}`;
@@ -191,7 +196,7 @@ app.post('/api/hunt/start', async (req, res) => {
             VALUES ($1, $2, $3, 'running', NOW());
         `, [jobId, fullQuery, city]);
 
-        // 2. Run live extraction engine
+        // 2. Run live extraction engine with safe limit
         const huntResult = await executeLiveHunt({
             listName: listName.trim(),
             country,
@@ -199,7 +204,7 @@ app.post('/api/hunt/start', async (req, res) => {
             city,
             area,
             niche,
-            limit: parseInt(limit, 10) || 20
+            limit: cappedLimit
         });
 
         // 3. Mark job completed
