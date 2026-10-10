@@ -52,5 +52,6 @@ function analyzePainPoints(leadData) {
 }
 
 module.exports = {
-    analyzePainPoints
+    analyzePainPoints,
+    tagPainPoints: analyzePainPoints
 };

@@ -2,8 +2,10 @@ const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { LeadRepository } = require('./modules/m1_storage/leadRepository');
+const { LeadRepository, pool } = require('./modules/m1_storage/leadRepository');
 const { ingestGmbCsv } = require('./modules/m2_gmb_integration/gmbParser');
+const { executeLiveHunt } = require('./modules/m2_gmb_integration/liveHunter');
+const { LOCATIONS_DATA, ALL_COUNTRIES } = require('./modules/locations');
 require('dotenv').config();
 
 const app = express();
@@ -27,10 +29,12 @@ app.get('/api/stats', async (req, res) => {
 // 2. List Leads with filtering
 app.get('/api/leads', async (req, res) => {
     try {
-        const { status, city, limit = 100, offset = 0 } = req.query;
+        const { status, city, country, list_name, limit = 100, offset = 0 } = req.query;
         const leads = await LeadRepository.listLeads({
             status,
             city,
+            country,
+            list_name,
             limit: parseInt(limit, 10),
             offset: parseInt(offset, 10)
         });
@@ -90,22 +94,59 @@ app.post('/api/leads/:id/dork', async (req, res) => {
     }
 });
 
-// 4. Trigger Ingestion of dentists_in_lahore.csv
-app.post('/api/ingest', async (req, res) => {
+// 4. Location Taxonomy Hierarchy
+app.get('/api/locations', (req, res) => {
+    res.json({
+        success: true,
+        countries: ALL_COUNTRIES,
+        hierarchy: LOCATIONS_DATA
+    });
+});
+
+// 5. Lead Lists API
+app.get('/api/lists', async (req, res) => {
     try {
-        const csvPath = path.join(__dirname, 'dentists_in_lahore.csv');
-        const stats = await ingestGmbCsv(csvPath);
-        res.json({ success: true, message: 'Ingestion completed', stats });
+        const result = await pool.query(`
+            SELECT l.id, l.name, l.description, l.target_country, l.target_region, l.target_city, l.target_area, l.target_niche, l.created_at,
+                   COUNT(le.id)::int AS lead_count
+            FROM lead_lists l
+            LEFT JOIN leads le ON le.list_name = l.name
+            GROUP BY l.id, l.name
+            ORDER BY l.created_at DESC;
+        `);
+        res.json({ success: true, lists: result.rows });
     } catch (err) {
-        console.error("Error ingesting CSV:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// 5. Get Unique Cities in DB for filtering
+app.post('/api/lists', async (req, res) => {
+    try {
+        const { name, description = '', country = '', region = '', city = '', area = '', niche = '' } = req.body;
+        if (!name || !name.trim()) {
+            return res.status(400).json({ success: false, error: 'List name is required' });
+        }
+        const result = await pool.query(`
+            INSERT INTO lead_lists (name, description, target_country, target_region, target_city, target_area, target_niche)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (name) DO UPDATE SET
+                description = EXCLUDED.description,
+                target_country = EXCLUDED.target_country,
+                target_region = EXCLUDED.target_region,
+                target_city = EXCLUDED.target_city,
+                target_area = EXCLUDED.target_area,
+                target_niche = EXCLUDED.target_niche
+            RETURNING *;
+        `, [name.trim(), description, country, region, city, area, niche]);
+        res.json({ success: true, list: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 6. Get Unique Cities in DB for filtering
 app.get('/api/cities', async (req, res) => {
     try {
-        const { pool } = require('./modules/m1_storage/leadRepository');
         const result = await pool.query(`SELECT DISTINCT city FROM leads WHERE city IS NOT NULL ORDER BY city ASC;`);
         const cities = result.rows.map(r => r.city).filter(Boolean);
         res.json({ success: true, cities });
@@ -114,49 +155,59 @@ app.get('/api/cities', async (req, res) => {
     }
 });
 
-// 6. Get Hunt Scraping Jobs History
+// 7. Get Hunt Scraping Jobs History
 app.get('/api/jobs', async (req, res) => {
     try {
-        const { pool } = require('./modules/m1_storage/leadRepository');
-        const result = await pool.query(`SELECT * FROM scraping_jobs ORDER BY created_at DESC LIMIT 20;`);
+        const result = await pool.query(`SELECT * FROM scraping_jobs ORDER BY created_at DESC LIMIT 25;`);
         res.json({ success: true, jobs: result.rows });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// 7. Start a New Hunt Session
+// 8. Start a New Live Hunt Session
 app.post('/api/hunt/start', async (req, res) => {
     try {
-        const { query, city, country = 'Pakistan', limit = 20 } = req.body;
-        if (!query || !city) {
-            return res.status(400).json({ success: false, error: 'Query and city are required' });
+        const {
+            listName = 'General Ingestion',
+            country = 'Pakistan',
+            state = '',
+            city = 'Lahore',
+            area = '',
+            niche = 'Dentists',
+            limit = 20
+        } = req.body;
+
+        if (!city || !niche) {
+            return res.status(400).json({ success: false, error: 'City and Niche are required' });
         }
 
-        const { pool } = require('./modules/m1_storage/leadRepository');
         const jobId = `hunt_${Date.now()}`;
-        const fullQuery = `${query} in ${city}, ${country}`;
+        const fullQuery = `${niche} in ${area ? area + ', ' : ''}${city}, ${country}`;
 
-        // Insert job into Supabase
+        // 1. Insert job into Supabase
         await pool.query(`
             INSERT INTO scraping_jobs (job_id, query, city, status, created_at)
             VALUES ($1, $2, $3, 'running', NOW());
         `, [jobId, fullQuery, city]);
 
-        // If target is dentists in Lahore, we auto-sync dentists_in_lahore.csv
-        let totalIngested = 0;
-        const csvPath = path.join(__dirname, 'dentists_in_lahore.csv');
-        if (fs.existsSync(csvPath)) {
-            const stats = await ingestGmbCsv(csvPath);
-            totalIngested = stats.upserted;
-        }
+        // 2. Run live extraction engine
+        const huntResult = await executeLiveHunt({
+            listName: listName.trim(),
+            country,
+            state,
+            city,
+            area,
+            niche,
+            limit: parseInt(limit, 10) || 20
+        });
 
-        // Mark job completed in Supabase
+        // 3. Mark job completed
         await pool.query(`
             UPDATE scraping_jobs 
             SET status = 'completed', total_found = $1, completed_at = NOW(), log_output = 'Completed extraction successfully.'
             WHERE job_id = $2;
-        `, [totalIngested, jobId]);
+        `, [huntResult.totalFound, jobId]);
 
         res.json({
             success: true,
@@ -165,7 +216,9 @@ app.post('/api/hunt/start', async (req, res) => {
                 query: fullQuery,
                 city,
                 country,
-                total_found: totalIngested,
+                area,
+                list_name: listName,
+                total_found: huntResult.totalFound,
                 status: 'completed'
             }
         });

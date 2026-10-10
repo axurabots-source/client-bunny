@@ -22,9 +22,9 @@ class LeadRepository {
             INSERT INTO leads (
                 place_id, title, category, address, city, phone, website,
                 review_count, review_rating, gmb_owner_name, gmb_link,
-                pain_points, raw_data, updated_at
+                pain_points, raw_data, list_name, country, state_province, district_area, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW()
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()
             )
             ON CONFLICT (place_id) DO UPDATE SET
                 title = EXCLUDED.title,
@@ -34,6 +34,10 @@ class LeadRepository {
                 review_rating = EXCLUDED.review_rating,
                 pain_points = EXCLUDED.pain_points,
                 raw_data = EXCLUDED.raw_data,
+                list_name = COALESCE(EXCLUDED.list_name, leads.list_name),
+                country = COALESCE(EXCLUDED.country, leads.country),
+                state_province = COALESCE(EXCLUDED.state_province, leads.state_province),
+                district_area = COALESCE(EXCLUDED.district_area, leads.district_area),
                 updated_at = NOW()
             RETURNING *;
         `;
@@ -51,7 +55,11 @@ class LeadRepository {
             leadData.gmb_owner_name || null,
             leadData.link || leadData.gmb_link || null,
             JSON.stringify(painPoints),
-            JSON.stringify(leadData.raw_data || {})
+            JSON.stringify(leadData.raw_data || {}),
+            leadData.list_name || 'General Ingestion',
+            leadData.country || 'Pakistan',
+            leadData.state_province || null,
+            leadData.district_area || null
         ];
 
         const res = await pool.query(query, values);
@@ -107,7 +115,7 @@ class LeadRepository {
     /**
      * List leads with optional filtering
      */
-    static async listLeads({ limit = 20, offset = 0, status, city } = {}) {
+    static async listLeads({ limit = 100, offset = 0, status, city, list_name, country } = {}) {
         let whereClauses = [];
         let values = [];
         let index = 1;
@@ -116,9 +124,17 @@ class LeadRepository {
             whereClauses.push(`status = $${index++}`);
             values.push(status);
         }
-        if (city) {
+        if (city && city !== 'all') {
             whereClauses.push(`city = $${index++}`);
             values.push(city);
+        }
+        if (list_name && list_name !== 'all') {
+            whereClauses.push(`list_name = $${index++}`);
+            values.push(list_name);
+        }
+        if (country && country !== 'all') {
+            whereClauses.push(`country = $${index++}`);
+            values.push(country);
         }
 
         const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';

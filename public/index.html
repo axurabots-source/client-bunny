@@ -12,42 +12,64 @@
 <body class="crm-body">
 
     <!-- LEFT SIDEBAR -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="appSidebar">
         <div class="sidebar-top">
             <div class="brand">
-                <span class="brand-badge">CLIENT BUNNY</span>
-                <span class="brand-ver">v1.0</span>
-            </div>
-            <div class="cloud-pill">
-                <span class="status-dot"></span>
-                <span>Supabase Cloud</span>
+                <div class="brand-logo">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-badge">CLIENT BUNNY</span>
+                    <span class="brand-ver">v1.0</span>
+                </div>
             </div>
         </div>
 
         <nav class="sidebar-nav">
             <div class="nav-section-label">WORKSPACE</div>
             <button class="nav-item active" data-screen="leads" id="navLeads">
-                <span class="nav-icon">📋</span>
+                <svg class="nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
                 <span class="nav-text">Leads</span>
                 <span class="nav-count" id="sidebarLeadCount">0</span>
             </button>
             <button class="nav-item" data-screen="hunt" id="navHunt">
-                <span class="nav-icon">🎯</span>
+                <svg class="nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="22" y1="12" x2="18" y2="12"></line>
+                    <line x1="6" y1="12" x2="2" y2="12"></line>
+                    <line x1="12" y1="6" x2="12" y2="2"></line>
+                    <line x1="12" y1="22" x2="12" y2="18"></line>
+                </svg>
                 <span class="nav-text">Hunt</span>
-                <span class="nav-badge">NEW</span>
+                <span class="nav-badge">DEEP</span>
+            </button>
+            <button class="nav-item" data-screen="lists" id="navLists">
+                <svg class="nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    <line x1="12" y1="11" x2="12" y2="17"></line>
+                    <line x1="9" y1="14" x2="15" y2="14"></line>
+                </svg>
+                <span class="nav-text">Lists</span>
+                <span class="nav-count" id="sidebarListsCount">0</span>
             </button>
             <button class="nav-item" data-screen="analytics" id="navAnalytics">
-                <span class="nav-icon">📊</span>
+                <svg class="nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
                 <span class="nav-text">Analytics</span>
             </button>
         </nav>
-
-        <div class="sidebar-bottom">
-            <div class="system-meta">
-                <div class="meta-row"><span>Engine:</span> <strong>Obscura Go</strong></div>
-                <div class="meta-row"><span>Port:</span> <strong>localhost:3005</strong></div>
-            </div>
-        </div>
     </aside>
 
     <!-- MAIN CRM CONTENT AREA -->
@@ -55,19 +77,34 @@
         
         <!-- TOP APP HEADER -->
         <header class="app-header">
-            <div class="header-breadcrumb">
-                <span class="bc-root">Workspace</span>
-                <span class="bc-sep">/</span>
-                <span class="bc-current" id="breadcrumbTitle">Leads</span>
+            <div class="header-left">
+                <!-- Sidebar Collapse / Expand Toggle Button -->
+                <button class="btn-icon" id="toggleSidebarBtn" title="Toggle Sidebar" aria-label="Toggle Sidebar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="9" y1="3" x2="9" y2="21"></line>
+                        <path id="sidebarToggleArrow" d="M15 9l-3 3 3 3"></path>
+                    </svg>
+                </button>
+
+                <div class="header-breadcrumb">
+                    <span class="bc-root">Workspace</span>
+                    <span class="bc-sep">/</span>
+                    <span class="bc-current" id="breadcrumbTitle">Leads</span>
+                </div>
             </div>
 
             <div class="header-actions">
                 <!-- Header Hunt Shortcut Button -->
                 <button class="btn btn-primary" id="headerHuntBtn">
-                    <span>🎯 Launch Hunt</span>
-                </button>
-                <button class="btn btn-secondary" id="reingestBtn">
-                    <span>Sync dentists.csv</span>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="22" y1="12" x2="18" y2="12"></line>
+                        <line x1="6" y1="12" x2="2" y2="12"></line>
+                        <line x1="12" y1="6" x2="12" y2="2"></line>
+                        <line x1="12" y1="22" x2="12" y2="18"></line>
+                    </svg>
+                    <span>Launch Hunt</span>
                 </button>
             </div>
         </header>
@@ -83,13 +120,20 @@
                         <p class="page-subtitle">Extracted business records enriched with pain points, contact info, and website health.</p>
                     </div>
                     <div class="hero-right">
-                        <!-- Dynamic City Filter Dropdown -->
-                        <div class="city-selector-box">
-                            <label for="cityFilterSelect">Location:</label>
-                            <select id="cityFilterSelect" class="select-input">
-                                <option value="all">All Locations</option>
-                                <option value="Lahore" selected>Lahore, Pakistan</option>
-                            </select>
+                        <!-- Target List & Location Filter Dropdowns -->
+                        <div class="filters-cluster">
+                            <div class="filter-select-box">
+                                <label for="listFilterSelect">List:</label>
+                                <select id="listFilterSelect" class="select-input">
+                                    <option value="all">All Lists</option>
+                                </select>
+                            </div>
+                            <div class="filter-select-box">
+                                <label for="cityFilterSelect">City:</label>
+                                <select id="cityFilterSelect" class="select-input">
+                                    <option value="all">All Cities</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -104,7 +148,7 @@
                     <div class="metric-card">
                         <span class="metric-label">NO WEBSITE</span>
                         <div class="metric-value highlight" id="statNoWebsite">—</div>
-                        <span class="metric-sub">Immediate web targets</span>
+                        <span class="metric-sub">High conversion targets</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-label">HIGH SPENDERS</span>
@@ -114,18 +158,18 @@
                     <div class="metric-card">
                         <span class="metric-label">REPUTATION RISKS</span>
                         <div class="metric-value" id="statRepRisk">—</div>
-                        <span class="metric-sub">1-star complaints detected</span>
+                        <span class="metric-sub">Critical review complaints</span>
                     </div>
                 </section>
 
                 <!-- Table Controls -->
                 <section class="controls-bar">
                     <div class="search-box">
-                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="11" cy="11" r="8"></circle>
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                         </svg>
-                        <input type="text" id="searchInput" placeholder="Search clinics by name, address, or phone...">
+                        <input type="text" id="searchInput" placeholder="Search clinics by name, district, address, or phone...">
                     </div>
                     <div class="filter-pills" id="filterPills">
                         <button class="filter-btn active" data-filter="all">All (<span id="countAll">0</span>)</button>
@@ -143,7 +187,7 @@
                                 <tr>
                                     <th style="width: 28%;">CLINIC / BUSINESS</th>
                                     <th style="width: 14%;">REPUTATION</th>
-                                    <th style="width: 22%;">ONLINE PRESENCE</th>
+                                    <th style="width: 22%;">LOCATION & CONTACT</th>
                                     <th style="width: 24%;">DETECTED PAIN POINTS</th>
                                     <th style="width: 12%; text-align: right;">ACTION</th>
                                 </tr>
@@ -163,89 +207,169 @@
             </div>
         </div>
 
-        <!-- SCREEN 2: HUNT CONSOLE (NEW TARGET SELECTION) -->
+        <!-- SCREEN 2: HUNT CONSOLE (TARGET LIST & DEEP CASCADING LOCATION) -->
         <div class="screen-view" id="screenHunt">
             <div class="screen-container">
                 
                 <section class="section-hero">
                     <div>
                         <h1 class="page-title">Hunt Launchpad</h1>
-                        <p class="page-subtitle">Configure search parameters to extract fresh high-intent business leads across countries & cities.</p>
+                        <p class="page-subtitle">Configure campaign lists and deep geographic targeting (Country → Region → City → District) for precision extraction.</p>
                     </div>
                 </section>
 
                 <div class="hunt-grid">
-                    <!-- Left: Hunt Form -->
+                    <!-- Left: Hunt Configuration Form -->
                     <div class="hunt-panel card-border">
                         <div class="panel-header">
-                            <span class="panel-tag">HUNT PARAMETERS</span>
-                            <h3 class="panel-title">Target Business Profile</h3>
+                            <span class="panel-tag">EXTRACTION PROTOCOL</span>
+                            <h3 class="panel-title">Configure Target Campaign</h3>
                         </div>
 
                         <form id="huntForm" class="hunt-form">
-                            <!-- Country Selection -->
-                            <div class="form-group">
-                                <label for="huntCountry">TARGET COUNTRY</label>
-                                <select id="huntCountry" class="form-input">
-                                    <option value="Pakistan" selected>Pakistan</option>
-                                    <option value="United States">United States</option>
-                                    <option value="United Kingdom">United Kingdom</option>
-                                    <option value="United Arab Emirates">United Arab Emirates</option>
-                                    <option value="Canada">Canada</option>
-                                    <option value="Saudi Arabia">Saudi Arabia</option>
-                                    <option value="Australia">Australia</option>
-                                </select>
-                            </div>
-
-                            <!-- City Selection -->
-                            <div class="form-group">
-                                <label for="huntCity">TARGET CITY / REGION</label>
-                                <input type="text" id="huntCity" class="form-input" placeholder="e.g. Lahore, Karachi, Islamabad..." value="Lahore" required>
-                                <div class="quick-chips" id="cityChips">
-                                    <button type="button" class="chip" data-val="Lahore">Lahore</button>
-                                    <button type="button" class="chip" data-val="Karachi">Karachi</button>
-                                    <button type="button" class="chip" data-val="Islamabad">Islamabad</button>
-                                    <button type="button" class="chip" data-val="Dubai">Dubai</button>
-                                    <button type="button" class="chip" data-val="London">London</button>
-                                    <button type="button" class="chip" data-val="New York">New York</button>
+                            
+                            <!-- STEP 1: CAMPAIGN / TARGET LIST -->
+                            <div class="form-section-box">
+                                <div class="form-section-header">
+                                    <span class="step-badge">1</span>
+                                    <h4>Target List / Campaign</h4>
+                                </div>
+                                <div class="form-group">
+                                    <label for="huntListSelect">SELECT EXISTING LIST OR CREATE NEW</label>
+                                    <div class="list-choice-box">
+                                        <select id="huntListSelect" class="form-input" style="flex: 1;">
+                                            <option value="">Loading lists...</option>
+                                        </select>
+                                        <button type="button" class="btn btn-secondary" id="toggleNewListBtn">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                            </svg>
+                                            <span>New List</span>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Inline New List Creator (Collapsible) -->
+                                    <div class="inline-new-list" id="inlineNewListBox" style="display: none;">
+                                        <div class="form-group">
+                                            <label for="newListNameInput">NEW LIST NAME</label>
+                                            <input type="text" id="newListNameInput" class="form-input" placeholder="e.g. Dubai Aesthetics Q4, Karachi Clinics...">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="newListDescInput">CAMPAIGN DESCRIPTION (OPTIONAL)</label>
+                                            <input type="text" id="newListDescInput" class="form-input" placeholder="e.g. Untargeted clinic owners for website redesign pitch">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Niche / Category -->
-                            <div class="form-group">
-                                <label for="huntNiche">BUSINESS NICHE / KEYWORD</label>
-                                <input type="text" id="huntNiche" class="form-input" placeholder="e.g. Dentists, Dermatologists, Gyms..." value="Dentists" required>
-                                <div class="quick-chips" id="nicheChips">
-                                    <button type="button" class="chip" data-val="Dentists">Dentists</button>
-                                    <button type="button" class="chip" data-val="Dermatologists">Dermatologists</button>
-                                    <button type="button" class="chip" data-val="Plastic Surgeons">Plastic Surgeons</button>
-                                    <button type="button" class="chip" data-val="Gyms">Gyms</button>
-                                    <button type="button" class="chip" data-val="Real Estate">Real Estate</button>
+                            <!-- STEP 2: CASCADING GEOGRAPHIC TARGETING -->
+                            <div class="form-section-box">
+                                <div class="form-section-header">
+                                    <span class="step-badge">2</span>
+                                    <h4>Geographic Target Hierarchy</h4>
+                                </div>
+
+                                <!-- Dynamic Hierarchy Breadcrumb Preview -->
+                                <div class="target-preview-bar">
+                                    <span class="preview-label">Location Path:</span>
+                                    <span class="target-step-tag" id="pathCountry">Pakistan</span>
+                                    <span class="target-arrow">→</span>
+                                    <span class="target-step-tag" id="pathRegion">Punjab</span>
+                                    <span class="target-arrow">→</span>
+                                    <span class="target-step-tag" id="pathCity">Lahore</span>
+                                    <span class="target-arrow">→</span>
+                                    <span class="target-step-tag" id="pathArea">Gulberg</span>
+                                </div>
+
+                                <!-- Cascading Dropdowns: Country & Region -->
+                                <div class="form-row">
+                                    <div class="form-group half">
+                                        <label for="huntCountry">TARGET COUNTRY</label>
+                                        <select id="huntCountry" class="form-input" required>
+                                            <option value="">Loading countries...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group half">
+                                        <label for="huntRegion">REGION / STATE / PROVINCE</label>
+                                        <select id="huntRegion" class="form-input" required>
+                                            <option value="">Select Country first</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Cascading Dropdowns: City & District/Area -->
+                                <div class="form-row">
+                                    <div class="form-group half">
+                                        <label for="huntCity">CITY</label>
+                                        <select id="huntCity" class="form-input" required>
+                                            <option value="">Select Region first</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group half">
+                                        <label for="huntArea">DISTRICT / AREA / SUB-LOCALITY</label>
+                                        <select id="huntArea" class="form-input">
+                                            <option value="">Select City first</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Custom Area Specific Text Input (if chosen) -->
+                                <div class="form-group" id="customAreaBox" style="display: none;">
+                                    <label for="customAreaInput">SPECIFIC SECTOR / STREET / CUSTOM LOCALITY</label>
+                                    <input type="text" id="customAreaInput" class="form-input" placeholder="Type exact sector, street, or commercial plaza name...">
                                 </div>
                             </div>
 
-                            <!-- Target Limit -->
-                            <div class="form-row">
-                                <div class="form-group half">
-                                    <label for="huntLimit">TARGET QUANTITY</label>
-                                    <select id="huntLimit" class="form-input">
-                                        <option value="20" selected>20 Leads (Fast MVP)</option>
-                                        <option value="50">50 Leads</option>
-                                        <option value="100">100 Leads (Deep Extraction)</option>
-                                    </select>
+                            <!-- STEP 3: BUSINESS NICHE & EXTRACTION PARAMETERS -->
+                            <div class="form-section-box">
+                                <div class="form-section-header">
+                                    <span class="step-badge">3</span>
+                                    <h4>Business Niche & Target Quantity</h4>
                                 </div>
-                                <div class="form-group half">
-                                    <label for="huntEngine">SCRAPING ENGINE</label>
-                                    <select id="huntEngine" class="form-input">
-                                        <option value="obscura" selected>Google Maps (Obscura)</option>
-                                    </select>
+
+                                <div class="form-group">
+                                    <label for="huntNiche">BUSINESS NICHE / KEYWORD</label>
+                                    <input type="text" id="huntNiche" class="form-input" placeholder="e.g. Dentists, Dermatologists, Plastic Surgeons..." value="Dentists" required>
+                                    <div class="quick-chips" id="nicheChips">
+                                        <button type="button" class="chip" data-val="Dentists">Dentists</button>
+                                        <button type="button" class="chip" data-val="Dermatologists">Dermatologists</button>
+                                        <button type="button" class="chip" data-val="Plastic Surgeons">Plastic Surgeons</button>
+                                        <button type="button" class="chip" data-val="Gyms & Fitness">Gyms & Fitness</button>
+                                        <button type="button" class="chip" data-val="Real Estate Agencies">Real Estate</button>
+                                        <button type="button" class="chip" data-val="Law Firms">Law Firms</button>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group half">
+                                        <label for="huntLimit">TARGET QUANTITY</label>
+                                        <select id="huntLimit" class="form-input">
+                                            <option value="20" selected>20 Leads (Fast MVP)</option>
+                                            <option value="50">50 Leads (Deep Extraction)</option>
+                                            <option value="100">100 Leads (Comprehensive)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group half">
+                                        <label for="huntEngine">EXTRACTION ENGINE</label>
+                                        <select id="huntEngine" class="form-input">
+                                            <option value="playwright" selected>Headless Browser & Local Maps</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
 
                             <!-- Submit CTA -->
                             <div class="form-actions">
                                 <button type="submit" class="btn btn-primary btn-large" id="startHuntSubmitBtn">
-                                    <span>🚀 Start Lead Hunt</span>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="22" y1="12" x2="18" y2="12"></line>
+                                        <line x1="6" y1="12" x2="2" y2="12"></line>
+                                        <line x1="12" y1="6" x2="12" y2="2"></line>
+                                        <line x1="12" y1="22" x2="12" y2="18"></line>
+                                    </svg>
+                                    <span id="startHuntBtnText">Start Lead Hunt</span>
                                 </button>
                             </div>
                         </form>
@@ -267,7 +391,32 @@
             </div>
         </div>
 
-        <!-- SCREEN 3: ANALYTICS (SUMMARY OVERVIEW) -->
+        <!-- SCREEN 3: LISTS MANAGEMENT -->
+        <div class="screen-view" id="screenLists">
+            <div class="screen-container">
+                <section class="section-hero">
+                    <div class="hero-left">
+                        <h1 class="page-title">Lead Lists & Campaigns</h1>
+                        <p class="page-subtitle">Organize scraped prospects by target niche, location, and outreach goals.</p>
+                    </div>
+                    <div class="hero-right">
+                        <button class="btn btn-primary" id="createNewListScreenBtn">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            <span>Create New List</span>
+                        </button>
+                    </div>
+                </section>
+
+                <div class="lists-grid" id="listsContainer">
+                    <div class="table-loading">Loading lists from Supabase...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREEN 4: ANALYTICS -->
         <div class="screen-view" id="screenAnalytics">
             <div class="screen-container">
                 <section class="section-hero">
@@ -316,7 +465,12 @@
                 <span class="drawer-tag">LEAD PROFILE</span>
                 <h2 class="drawer-title" id="drawerTitle">—</h2>
             </div>
-            <button class="close-btn" id="closeDrawerBtn">&times;</button>
+            <button class="close-btn" id="closeDrawerBtn" aria-label="Close Profile">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
         </div>
 
         <div class="drawer-body" id="drawerBody">
