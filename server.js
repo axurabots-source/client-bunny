@@ -144,6 +144,40 @@ app.post('/api/lists', async (req, res) => {
     }
 });
 
+// 5.5. Delete a Lead List & its Associated Leads from Database
+app.delete('/api/lists/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Fetch list details
+        const listRes = await pool.query(`SELECT * FROM lead_lists WHERE id::text = $1 OR name = $1`, [id]);
+        if (listRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'List not found' });
+        }
+        const listRecord = listRes.rows[0];
+        const listName = listRecord.name;
+
+        // 2. Delete all leads belonging to this list (cascades to decision_makers & logs)
+        const delLeadsRes = await pool.query(`DELETE FROM leads WHERE list_name = $1 RETURNING id;`, [listName]);
+        const leadsDeleted = delLeadsRes.rowCount;
+
+        // 3. Delete list from lead_lists
+        await pool.query(`DELETE FROM lead_lists WHERE id = $1;`, [listRecord.id]);
+
+        console.log(`🗑️ Deleted list "${listName}" and ${leadsDeleted} associated leads from Supabase.`);
+
+        res.json({
+            success: true,
+            message: `List "${listName}" and ${leadsDeleted} leads permanently deleted.`,
+            listName,
+            leadsDeleted
+        });
+    } catch (err) {
+        console.error("Error deleting list:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // 6. Get Unique Cities in DB for filtering
 app.get('/api/cities', async (req, res) => {
     try {

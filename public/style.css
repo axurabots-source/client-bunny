@@ -290,6 +290,12 @@ body.crm-body.sidebar-collapsed .crm-main {
     background: var(--bg-subtle);
 }
 
+.btn-danger-hover:hover {
+    color: #DC2626 !important;
+    border-color: #DC2626 !important;
+    background: #FEF2F2 !important;
+}
+
 .btn-primary {
     background: var(--accent-black);
     color: var(--accent-white);

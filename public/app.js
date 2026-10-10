@@ -403,9 +403,18 @@ function renderLists() {
                     <strong>${l.lead_count || 0}</strong>
                 </div>
             </div>
-            <div>
-                <button class="btn btn-secondary" style="width: 100%; justify-content: center;" onclick="viewListLeads('${escapeHtml(l.name)}')">
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary" style="flex: 1; justify-content: center;" onclick="viewListLeads('${escapeHtml(l.name)}')">
                     <span>View Leads</span>
+                </button>
+                <button class="btn btn-secondary btn-danger-hover" title="Delete list & remove its leads from DB" onclick="deleteList(${l.id}, '${escapeHtml(l.name)}')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                    <span>Delete</span>
                 </button>
             </div>
         </div>
@@ -417,6 +426,37 @@ window.viewListLeads = function(listName) {
     listFilterSelect.value = listName;
     switchScreen('leads');
     applyFilters();
+};
+
+window.deleteList = async function(id, name) {
+    const confirmed = confirm(`Are you sure you want to permanently delete list "${name}" and all of its leads from Supabase? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    showToast(`Deleting list "${name}" from database...`);
+
+    try {
+        const res = await fetch(`/api/lists/${id}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Deleted list "${name}" and ${data.leadsDeleted} leads from database.`);
+            if (currentListFilter === name) {
+                currentListFilter = 'all';
+                listFilterSelect.value = 'all';
+            }
+            await Promise.all([
+                fetchLists(),
+                fetchStats(),
+                fetchCities(),
+                fetchLeads()
+            ]);
+        } else {
+            showToast('Delete error: ' + (data.error || 'Failed to delete list'));
+        }
+    } catch (err) {
+        showToast('Network error deleting list.');
+    }
 };
 
 // ==========================================================
