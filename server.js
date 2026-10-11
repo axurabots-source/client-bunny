@@ -84,7 +84,7 @@ app.post('/api/leads/:id/dork', async (req, res) => {
         const lead = await LeadRepository.getLeadById(req.params.id);
         if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
-        const dorkResult = await resolveDorkContacts(lead.title, lead.city || 'Lahore', lead.id);
+        const dorkResult = await resolveDorkContacts(lead.title, lead.city || lead.country || '', lead.id);
         const updatedLead = await LeadRepository.getLeadById(lead.id);
 
         res.json({ success: true, dorkResult, lead: updatedLead });

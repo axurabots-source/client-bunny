@@ -876,9 +876,10 @@ function renderDrawerContent(lead) {
                 <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">${escapeHtml(dm.title_role || 'Decision Maker')} (${escapeHtml(dm.email_source || 'Search')})</div>
                 ${dm.email ? `<div style="font-size: 13px;">Email: <strong>${escapeHtml(dm.email)}</strong></div>` : ''}
                 ${dm.phone ? `<div style="font-size: 13px;">Phone: <strong>${escapeHtml(dm.phone)}</strong></div>` : ''}
-                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
                     ${dm.linkedin_url ? `<a href="${dm.linkedin_url}" target="_blank" class="web-link" style="font-size: 11px;">LinkedIn Profile</a>` : ''}
                     ${dm.facebook_url ? `<a href="${dm.facebook_url}" target="_blank" class="web-link" style="font-size: 11px;">Facebook Page</a>` : ''}
+                    ${dm.instagram_url ? `<a href="${dm.instagram_url}" target="_blank" class="web-link" style="font-size: 11px;">Instagram Profile</a>` : ''}
                 </div>
             </div>
         `).join('');
@@ -953,14 +954,16 @@ window.triggerCrawl = async function(id) {
         const res = await fetch(`/api/leads/${id}/enrich`, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-            showToast(`Crawl Complete! Found ${data.crawlResult.emails.length} emails, ${data.crawlResult.contacts.length} doctors/names.`);
+            const numEmails = (data.crawlResult?.emails || []).length;
+            const numContacts = (data.crawlResult?.contacts || data.crawlResult?.doctor_names || []).length;
+            showToast(`Crawl Complete! Found ${numEmails} emails, ${numContacts} contacts/leaders.`);
             renderDrawerContent(data.lead);
             fetchLeads();
         } else {
             showToast('Crawl failed: ' + data.error);
         }
     } catch (err) {
-        showToast('Network error during crawling.');
+        showToast('Network error during crawling: ' + err.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = `<span>Crawl Website</span>`;
@@ -977,14 +980,17 @@ window.triggerDork = async function(id) {
         const res = await fetch(`/api/leads/${id}/dork`, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-            showToast(`Dork Complete! Found ${data.dorkResult.linkedinProfiles.length} LinkedIn profiles, ${data.dorkResult.facebookUrls.length} FB pages.`);
+            const numLi = (data.dorkResult?.linkedinProfiles || []).length;
+            const numFb = (data.dorkResult?.facebookUrls || []).length;
+            const numEm = (data.dorkResult?.directEmails || []).length;
+            showToast(`Dork Complete! Found ${numLi} LinkedIn, ${numFb} FB, ${numEm} emails.`);
             renderDrawerContent(data.lead);
             fetchLeads();
         } else {
             showToast('Dork failed: ' + data.error);
         }
     } catch (err) {
-        showToast('Network error during dorking.');
+        showToast('Network error during dorking: ' + err.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = `<span>Google Dork</span>`;

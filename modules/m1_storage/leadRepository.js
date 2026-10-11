@@ -74,6 +74,43 @@ class LeadRepository {
      * Insert or update a Decision Maker associated with a lead
      */
     static async addDecisionMaker(leadId, dmData) {
+        // Check if decision maker already exists for this lead by name or email
+        const existing = await pool.query(
+            `SELECT id FROM decision_makers 
+             WHERE lead_id = $1 
+               AND (LOWER(full_name) = LOWER($2) OR (email IS NOT NULL AND LOWER(email) = LOWER($3))) 
+             LIMIT 1`,
+            [leadId, dmData.full_name, dmData.email || '']
+        );
+
+        if (existing.rows.length > 0) {
+            const updateRes = await pool.query(`
+                UPDATE decision_makers SET
+                    full_name = COALESCE($1, full_name),
+                    title_role = COALESCE($2, title_role),
+                    email = COALESCE($3, email),
+                    linkedin_url = COALESCE($4, linkedin_url),
+                    facebook_url = COALESCE($5, facebook_url),
+                    instagram_url = COALESCE($6, instagram_url),
+                    phone = COALESCE($7, phone),
+                    confidence_score = GREATEST(confidence_score, $8),
+                    updated_at = NOW()
+                WHERE id = $9
+                RETURNING *;
+            `, [
+                dmData.full_name,
+                dmData.title_role,
+                dmData.email || null,
+                dmData.linkedin_url || null,
+                dmData.facebook_url || null,
+                dmData.instagram_url || null,
+                dmData.phone || null,
+                dmData.confidence_score || 50,
+                existing.rows[0].id
+            ]);
+            return updateRes.rows[0];
+        }
+
         const query = `
             INSERT INTO decision_makers (
                 lead_id, full_name, title_role, email, email_source,

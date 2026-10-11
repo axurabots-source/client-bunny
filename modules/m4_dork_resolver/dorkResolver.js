@@ -1,41 +1,87 @@
 const { chromium } = require('playwright');
-const { generateDorkQueries } = require('./dorkGenerator');
-const { LeadRepository } = require('../m1_storage/leadRepository');
+const { pool, LeadRepository } = require('../m1_storage/leadRepository');
 
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
 
-function decodeBingUrl(rawUrl) {
+function decodeSearchUrl(rawUrl) {
     if (!rawUrl) return '';
     try {
-        const match = rawUrl.match(/u=a1([a-zA-Z0-9_\-=]+)/);
-        if (match) {
-            let b64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
-            while (b64.length % 4 !== 0) b64 += '=';
-            return Buffer.from(b64, 'base64').toString('utf-8');
+        if (rawUrl.includes('/RU=')) {
+            const match = rawUrl.match(/\/RU=([^/]+)\/RK=/);
+            if (match) return decodeURIComponent(match[1]);
+        }
+        if (rawUrl.includes('u=a1')) {
+            const match = rawUrl.match(/u=a1([a-zA-Z0-9_\-=]+)/);
+            if (match) {
+                let b64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4 !== 0) b64 += '=';
+                return Buffer.from(b64, 'base64').toString('utf-8');
+            }
         }
     } catch (e) {}
     return rawUrl;
 }
 
-function nameFromLinkedInUrl(linkedinUrl) {
-    if (!linkedinUrl) return null;
-    try {
-        const match = linkedinUrl.match(/linkedin\.com\/in\/([^/?#]+)/i);
-        if (match) {
-            let slug = match[1].replace(/-[a-f0-9]{6,}$/i, '').replace(/-\d+$/, '');
-            let words = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1));
-            return words.join(' ');
-        }
-    } catch (e) {}
-    return null;
+function cleanTitleText(raw) {
+    if (!raw) return '';
+    let t = raw;
+    t = t.replace(/^.*[›»]\s*/g, '');
+    t = t.replace(/^[a-z0-9_-]+(?=[A-Z])/g, '');
+    t = t.replace(/\s*\|\s*LinkedIn.*$/i, '');
+    t = t.replace(/\s*-\s*LinkedIn.*$/i, '');
+    return t.trim();
 }
 
+function parseNameAndRole(title, companyName) {
+    const clean = cleanTitleText(title);
+    const parts = clean.split(/\s*[-–—|]\s*/);
+    if (parts.length >= 2) {
+        let name = parts[0].trim();
+        let role = parts[1].trim();
+        const normCompany = (companyName || '').toLowerCase().replace(/[^\w]/g, '');
+        const normP1 = name.toLowerCase().replace(/[^\w]/g, '');
+        if (normCompany && normP1.includes(normCompany) && parts[1]) {
+            name = parts[1].trim();
+            role = parts[2] ? parts[2].trim() : 'Executive / Owner';
+        }
+        return { name, role: role.length < 60 ? role : 'Executive / Owner' };
+    }
+    return { name: clean, role: 'Owner' };
+}
+
+async function searchEngine(page, searchUrl, itemSelector) {
+    try {
+        await page.goto(searchUrl, { waitUntil: 'load', timeout: 15000 });
+        await page.waitForTimeout(1000);
+
+        const consent = await page.$('button[name="agree"], button:has-text("Accept all"), button:has-text("I agree"), #bnp_btn_accept');
+        if (consent) {
+            await consent.click().catch(() => {});
+            await page.waitForTimeout(1000);
+        }
+
+        return await page.$$eval(itemSelector, els => {
+            return els.map(el => {
+                const a = el.tagName === 'A' ? el : el.querySelector('h3 a, h2 a, a[href^="http"]');
+                const title = a ? a.textContent.trim() : '';
+                const href = a ? a.href : '';
+                const p = el.querySelector('.compText, .b_caption p, .b_snippet, p');
+                const snippet = p ? p.textContent.trim() : '';
+                return (title && href) ? { title, href, snippet } : null;
+            }).filter(Boolean);
+        });
+    } catch (e) {
+        return [];
+    }
+}
+
+
 /**
- * Execute Dork Search via Playwright
+ * Execute Multi-Engine Dork Search (Yahoo + Bing) via Playwright
  */
 async function resolveDorkContacts(businessTitle, city = 'Lahore', leadId = null) {
-    console.log(`\n🕵️‍♂️ Running Zero-Cost Dork Resolver for: "${businessTitle}" in ${city}`);
-    const queries = generateDorkQueries(businessTitle, city);
+    console.log(`\n🕵️‍♂️ Running Targeted Search Dork for: "${businessTitle}" in ${city}`);
+    const cleanTitle = (businessTitle || '').replace(/[^\w\s-]/g, '').trim();
 
     let browser = null;
     const discovered = {
@@ -48,86 +94,100 @@ async function resolveDorkContacts(businessTitle, city = 'Lahore', leadId = null
     try {
         browser = await chromium.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-blink-features=AutomationControlled'
+            ]
         });
 
         const context = await browser.newContext({
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            viewport: { width: 1280, height: 720 }
+            viewport: { width: 1280, height: 800 }
         });
 
         const page = await context.newPage();
 
-        // Target Dork 1: LinkedIn profiles
-        const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(queries.linkedinOwner)}`;
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
-        await page.waitForTimeout(2000);
+        // 1. Primary Engine: Yahoo Search for LinkedIn
+        const q1 = `${cleanTitle} ${city} linkedin`;
+        const yahooItems = await searchEngine(
+            page,
+            `https://search.yahoo.com/search?p=${encodeURIComponent(q1)}`,
+            '#main .rel-search, #web ol li, li.first, li div h3 a, div.compTitle h3 a'
+        );
 
-        const rawResults = await page.evaluate(() => {
-            const list = [];
-            document.querySelectorAll('li.b_algo, .b_algo').forEach(el => {
-                const a = el.querySelector('h2 a, a[href^="http"]');
-                const p = el.querySelector('.b_caption p, p');
-                if (a) {
-                    list.push({
-                        href: a.href,
-                        title: a.innerText || '',
-                        snippet: p ? p.innerText : ''
+        for (const item of yahooItems) {
+            const url = decodeSearchUrl(item.href);
+            if (url.includes('linkedin.com/in/') || url.includes('linkedin.com/company/')) {
+                const parsed = parseNameAndRole(item.title, cleanTitle);
+                if (!discovered.linkedinProfiles.some(p => p.url === url)) {
+                    discovered.linkedinProfiles.push({
+                        url,
+                        name: parsed.name,
+                        role: parsed.role,
+                        snippet: item.snippet,
+                        isPersonal: url.includes('linkedin.com/in/')
                     });
                 }
-            });
-            return list;
-        });
-
-        rawResults.forEach(r => {
-            const decodedUrl = decodeBingUrl(r.href);
-            if (decodedUrl.includes('linkedin.com/in/')) {
-                const detectedName = nameFromLinkedInUrl(decodedUrl) || r.title.split('-')[0].trim();
-                discovered.linkedinProfiles.push({
-                    url: decodedUrl,
-                    name: detectedName,
-                    snippet: r.snippet
-                });
-            } else if (decodedUrl.includes('facebook.com/')) {
-                discovered.facebookUrls.push(decodedUrl);
+            } else if (url.includes('facebook.com/') && !url.includes('sharer')) {
+                if (!discovered.facebookUrls.includes(url)) discovered.facebookUrls.push(url);
             }
 
             // Extract emails from snippets
-            const textToScan = `${r.title} ${r.snippet}`;
+            const textToScan = `${item.title} ${item.snippet}`;
             let emailMatch;
             EMAIL_REGEX.lastIndex = 0;
             while ((emailMatch = EMAIL_REGEX.exec(textToScan)) !== null) {
                 const email = emailMatch[0].toLowerCase().trim();
-                if (!discovered.directEmails.includes(email)) {
+                if (!discovered.directEmails.includes(email) && !email.includes('sentry.io') && !email.includes('example.com')) {
                     discovered.directEmails.push(email);
                 }
             }
-        });
+        }
 
-        // Target Dork 2: Facebook & Email check if no LinkedIn profile found
-        if (discovered.linkedinProfiles.length === 0) {
-            const fbSearchUrl = `https://www.bing.com/search?q=${encodeURIComponent(queries.facebookContact)}`;
-            await page.goto(fbSearchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
-            await page.waitForTimeout(2000);
+        // 2. Secondary Engine: Bing Search Fallback if no personal profile found
+        const hasPersonalProfile = discovered.linkedinProfiles.some(p => p.isPersonal);
+        if (!hasPersonalProfile) {
+            const bingItems = await searchEngine(
+                page,
+                `https://www.bing.com/search?q=${encodeURIComponent(q1)}&setlang=en&setmkt=en-US`,
+                'li.b_algo'
+            );
 
-            const fbResults = await page.evaluate(() => {
-                const list = [];
-                document.querySelectorAll('li.b_algo, .b_algo').forEach(el => {
-                    const a = el.querySelector('h2 a, a[href^="http"]');
-                    const p = el.querySelector('.b_caption p, p');
-                    if (a) {
-                        list.push({ href: a.href, title: a.innerText || '', snippet: p ? p.innerText : '' });
+            for (const item of bingItems) {
+                const url = decodeSearchUrl(item.href);
+                if (url.includes('linkedin.com/in/') || url.includes('linkedin.com/company/')) {
+                    const parsed = parseNameAndRole(item.title, cleanTitle);
+                    if (!discovered.linkedinProfiles.some(p => p.url === url)) {
+                        discovered.linkedinProfiles.push({
+                            url,
+                            name: parsed.name,
+                            role: parsed.role,
+                            snippet: item.snippet,
+                            isPersonal: url.includes('linkedin.com/in/')
+                        });
                     }
-                });
-                return list;
-            });
-
-            fbResults.forEach(r => {
-                const decodedUrl = decodeBingUrl(r.href);
-                if (decodedUrl.includes('facebook.com/') && !discovered.facebookUrls.includes(decodedUrl)) {
-                    discovered.facebookUrls.push(decodedUrl);
+                } else if (url.includes('facebook.com/') && !url.includes('sharer')) {
+                    if (!discovered.facebookUrls.includes(url)) discovered.facebookUrls.push(url);
                 }
-            });
+            }
+        }
+
+        // 3. Search Facebook specifically if still missing
+        if (discovered.facebookUrls.length === 0) {
+            const qFb = `${cleanTitle} ${city} facebook`;
+            const fbItems = await searchEngine(
+                page,
+                `https://search.yahoo.com/search?p=${encodeURIComponent(qFb)}`,
+                '#main .rel-search, #web ol li, li.first, li div h3 a, div.compTitle h3 a'
+            );
+
+            for (const item of fbItems) {
+                const url = decodeSearchUrl(item.href);
+                if (url.includes('facebook.com/') && !url.includes('sharer') && !discovered.facebookUrls.includes(url)) {
+                    discovered.facebookUrls.push(url);
+                }
+            }
         }
 
     } catch (err) {
@@ -136,40 +196,41 @@ async function resolveDorkContacts(businessTitle, city = 'Lahore', leadId = null
         if (browser) await browser.close();
     }
 
-    // De-duplicate
+    // Sort LinkedIn profiles: personal profiles (/in/) first
+    discovered.linkedinProfiles.sort((a, b) => (b.isPersonal ? 1 : 0) - (a.isPersonal ? 1 : 0));
     discovered.linkedinProfiles = discovered.linkedinProfiles.slice(0, 3);
     discovered.facebookUrls = discovered.facebookUrls.slice(0, 2);
 
-    // Save to Supabase if leadId provided
+    // Save Top Decision Maker to Supabase if leadId provided
     if (leadId) {
-        const topProfile = discovered.linkedinProfiles[0];
+        const topProfile = discovered.linkedinProfiles[0] || null;
         const topEmail = discovered.directEmails[0] || null;
         const topFb = discovered.facebookUrls[0] || null;
 
         if (topProfile || topEmail || topFb) {
-            const contactName = topProfile ? topProfile.name : 'Business Owner / Doctor';
+            const contactName = topProfile && topProfile.name ? topProfile.name : 'Business Owner';
+            const role = topProfile && topProfile.role ? topProfile.role : 'Owner';
 
             await LeadRepository.addDecisionMaker(leadId, {
                 full_name: contactName,
-                title_role: contactName.toLowerCase().includes('dr') ? 'Doctor / Founder' : 'Owner',
+                title_role: role,
                 email: topEmail,
                 email_source: 'google_dork',
                 linkedin_url: topProfile ? topProfile.url : null,
                 facebook_url: topFb,
-                confidence_score: 65
+                confidence_score: topProfile ? (topProfile.isPersonal ? 85 : 70) : 60
             });
 
-            // Mark lead status as enriched
-            const { pool } = require('../m1_storage/leadRepository');
             await pool.query(`UPDATE leads SET status = 'enriched', updated_at = NOW() WHERE id = $1`, [leadId]);
         }
     }
 
+    console.log(`✅ Dork complete for ${businessTitle}: ${discovered.linkedinProfiles.length} LinkedIn, ${discovered.facebookUrls.length} FB, ${discovered.directEmails.length} emails.`);
     return discovered;
 }
 
 module.exports = {
     resolveDorkContacts,
-    decodeBingUrl,
-    nameFromLinkedInUrl
+    decodeSearchUrl,
+    parseNameAndRole
 };
