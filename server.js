@@ -94,6 +94,20 @@ app.post('/api/leads/:id/dork', async (req, res) => {
     }
 });
 
+// 3.7. All-in-One Full Enrichment (Crawl + Groq Bio + WhatsApp + Dork + AI Pitch)
+app.post('/api/leads/:id/full-enrich', async (req, res) => {
+    try {
+        const { autoEnrichLead } = require('./modules/m3_website_crawler/autoEnricher');
+        const enrichedLead = await autoEnrichLead(req.params.id);
+        if (!enrichedLead) return res.status(404).json({ success: false, error: 'Lead not found' });
+        res.json({ success: true, lead: enrichedLead });
+    } catch (err) {
+        console.error("Error running full enrich:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+
 // 4. Location Taxonomy Hierarchy
 app.get('/api/locations', (req, res) => {
     res.json({
@@ -266,6 +280,59 @@ app.post('/api/hunt/start', async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 });
+
+// 8.1. Live Streaming SSE Hunt Endpoint (One-by-One Real-Time Push)
+app.get('/api/hunt/stream', async (req, res) => {
+    const {
+        listName = 'General Ingestion',
+        country = 'Pakistan',
+        state = '',
+        city = 'Lahore',
+        area = '',
+        niche = 'Dentists',
+        limit = 35
+    } = req.query;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const sendEvent = (payload) => {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    let cappedLimit = parseInt(limit, 10) || 35;
+    if (cappedLimit > 45) cappedLimit = 45;
+    if (cappedLimit < 15) cappedLimit = 15;
+
+    const fullQuery = `${niche} in ${area ? area + ', ' : ''}${city}, ${country}`;
+    sendEvent({ type: 'start', query: fullQuery, limit: cappedLimit, listName });
+
+    try {
+        const huntResult = await executeLiveHunt({
+            listName: listName.trim(),
+            country,
+            state,
+            city,
+            area,
+            niche,
+            limit: cappedLimit,
+            autoEnrich: true,
+            onLeadExtracted: (lead) => {
+                sendEvent({ type: 'lead', lead });
+            }
+        });
+
+        sendEvent({ type: 'done', totalFound: huntResult.totalFound });
+        res.end();
+    } catch (err) {
+        console.error("Hunt stream error:", err);
+        sendEvent({ type: 'error', message: err.message });
+        res.end();
+    }
+});
+
 
 // Fallback to index.html
 app.use((req, res) => {

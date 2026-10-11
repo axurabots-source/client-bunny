@@ -154,6 +154,17 @@ class LeadRepository {
     }
 
     /**
+     * Get all decision makers for a lead
+     */
+    static async getDecisionMakers(leadId) {
+        const dmRes = await pool.query(
+            `SELECT * FROM decision_makers WHERE lead_id = $1 ORDER BY confidence_score DESC`,
+            [leadId]
+        );
+        return dmRes.rows;
+    }
+
+    /**
      * List leads with optional filtering
      */
     static async listLeads({ limit = 100, offset = 0, status, city, list_name, country } = {}) {

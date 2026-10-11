@@ -179,11 +179,16 @@ function extractSocialLinks($) {
         linkedin: null,
         facebook: null,
         instagram: null,
-        twitter: null
+        twitter: null,
+        whatsapp: null
     };
 
     $('a[href]').each((_, el) => {
         const href = ($(el).attr('href') || '').trim();
+        if (!socials.whatsapp && (href.includes('wa.me/') || href.includes('whatsapp.com') || href.startsWith('whatsapp:'))) {
+            const waMatch = href.match(/(?:wa\.me\/|phone=)([0-9+]+)/);
+            socials.whatsapp = waMatch ? waMatch[1] : href;
+        }
         if (!socials.linkedin && href.includes('linkedin.com/')) {
             socials.linkedin = href;
         }
@@ -200,6 +205,7 @@ function extractSocialLinks($) {
 
     return socials;
 }
+
 
 function isValidPersonName(name) {
     if (!name || typeof name !== 'string') return false;
@@ -334,11 +340,13 @@ async function crawlWebsite(targetUrl, leadId = null) {
     const collectedEmails = new Set();
     const collectedPhones = new Set();
     const collectedContacts = [];
-    let collectedSocials = { linkedin: null, facebook: null, instagram: null, twitter: null };
+    let collectedSocials = { linkedin: null, facebook: null, instagram: null, twitter: null, whatsapp: null };
+    let aboutTextPreview = '';
 
     // 1. Fetch Root Page
     visited.add(root);
     const rootRes = await fetchPage(root);
+
 
     let candidateSubpages = [
         `${root}/about`,
@@ -401,6 +409,13 @@ async function crawlWebsite(targetUrl, leadId = null) {
             if (!collectedSocials.facebook && subSocials.facebook) collectedSocials.facebook = subSocials.facebook;
             if (!collectedSocials.instagram && subSocials.instagram) collectedSocials.instagram = subSocials.instagram;
             if (!collectedSocials.twitter && subSocials.twitter) collectedSocials.twitter = subSocials.twitter;
+            if (!collectedSocials.whatsapp && subSocials.whatsapp) collectedSocials.whatsapp = subSocials.whatsapp;
+
+            if (subUrl.includes('about') || subUrl.includes('team') || subUrl.includes('leadership') || subUrl.includes('founder') || subUrl.includes('contact')) {
+                const textClone = cheerio.load(subRes.html);
+                textClone('script, style, noscript, svg, nav, footer').remove();
+                aboutTextPreview += ' ' + textClone('body').text().replace(/\s+/g, ' ').substring(0, 1500);
+            }
         }
     }
 
@@ -426,8 +441,10 @@ async function crawlWebsite(targetUrl, leadId = null) {
         phones: phoneList,
         contacts: finalContacts,
         doctor_names: finalContacts.filter(c => c.name.startsWith('Dr')).map(c => c.name),
-        social_links: collectedSocials
+        social_links: collectedSocials,
+        aboutTextPreview: aboutTextPreview.trim()
     };
+
 
     // If leadId provided, save directly to Supabase decision_makers table
     if (leadId) {

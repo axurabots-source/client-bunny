@@ -179,8 +179,19 @@
                     </div>
                 </section>
 
+                <!-- Live Hunt Streaming Progress Banner (Auto-shown when live hunt runs) -->
+                <div id="liveHuntBanner" class="live-hunt-banner" style="display: none;">
+                    <div class="live-hunt-banner-left">
+                        <span class="live-pulse-dot"></span>
+                        <strong id="liveHuntQuery">Live Hunt Running...</strong>
+                        <span style="color: #A1A1AA;" id="liveHuntStatusText">Scraping Google Maps listings...</span>
+                    </div>
+                    <div class="live-hunt-counter" id="liveHuntCounter">0 Leads Found</div>
+                </div>
+
                 <!-- Leads Table -->
                 <section class="table-card">
+
                     <div class="table-container">
                         <table class="leads-table">
                             <thead>

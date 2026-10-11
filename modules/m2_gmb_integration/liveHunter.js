@@ -8,8 +8,9 @@ const { formatDirectMapsLink } = require('./mapsHelper');
  * Scrapes directly from live Google Maps (https://www.google.com/maps/search/...)
  * NEVER generates fake or simulated data.
  */
-async function executeLiveHunt({ listName, country, state, city, area, niche, limit = 35 }) {
+async function executeLiveHunt({ listName, country, state, city, area, niche, limit = 35, autoEnrich = true, onLeadExtracted = null }) {
     const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 35, 10), 45);
+
     
     // Build accurate search query for Google Maps
     const locationParts = [area, city, country].filter(Boolean);
@@ -241,7 +242,7 @@ async function executeLiveHunt({ listName, country, state, city, area, niche, li
         console.warn(`⚠️ No Google Maps listings found for "${fullQuery}".`);
     }
 
-    // 6. Save ALL 100% REAL leads into Supabase under listName
+    // 6. Save ALL 100% REAL leads into Supabase under listName & stream them one by one
     const savedLeads = [];
     for (const lead of extractedLeads) {
         const painPoints = tagPainPoints({
@@ -260,11 +261,34 @@ async function executeLiveHunt({ listName, country, state, city, area, niche, li
 
         try {
             const saved = await LeadRepository.upsertLead(record);
-            savedLeads.push(saved);
+            
+            // Auto-enrich in place if enabled
+            let enrichedLead = saved;
+            if (autoEnrich) {
+                try {
+                    const { autoEnrichLead } = require('../m3_website_crawler/autoEnricher');
+                    const res = await autoEnrichLead(saved.id);
+                    if (res) enrichedLead = res;
+                } catch (enrErr) {
+                    console.warn(`Auto-enrich note for ${saved.title}:`, enrErr.message);
+                }
+            }
+
+            savedLeads.push(enrichedLead);
+
+            // Stream immediately to frontend
+            if (typeof onLeadExtracted === 'function') {
+                try {
+                    onLeadExtracted(enrichedLead);
+                } catch (cbErr) {
+                    console.warn("onLeadExtracted callback error:", cbErr.message);
+                }
+            }
         } catch (dbErr) {
             console.error("Error saving real lead to Supabase:", dbErr.message);
         }
     }
+
 
     // Ensure list is registered in lead_lists
     await pool.query(`

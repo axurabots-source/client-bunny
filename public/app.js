@@ -78,6 +78,12 @@ const jobsList = document.getElementById('jobsList');
 const startHuntSubmitBtn = document.getElementById('startHuntSubmitBtn');
 const startHuntBtnText = document.getElementById('startHuntBtnText');
 
+// Live Hunt Streaming Banner Elements
+const liveHuntBanner = document.getElementById('liveHuntBanner');
+const liveHuntQuery = document.getElementById('liveHuntQuery');
+const liveHuntStatusText = document.getElementById('liveHuntStatusText');
+const liveHuntCounter = document.getElementById('liveHuntCounter');
+
 // Lists Screen
 const listsContainer = document.getElementById('listsContainer');
 const createNewListScreenBtn = document.getElementById('createNewListScreenBtn');
@@ -588,7 +594,7 @@ function bindEvents() {
         if (isHidden) newListNameInput.focus();
     });
 
-    // Hunt Form Submit
+    // Hunt Form Submit (Real-time SSE Live Streaming)
     huntForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -596,7 +602,6 @@ function bindEvents() {
         let targetListName = huntListSelect.value;
         if (inlineNewListBox.style.display !== 'none' && newListNameInput.value.trim()) {
             targetListName = newListNameInput.value.trim();
-            // Create list in Supabase
             try {
                 await fetch('/api/lists', {
                     method: 'POST',
@@ -633,7 +638,7 @@ function bindEvents() {
 
         // Set Loading state with SVG spinner
         startHuntSubmitBtn.disabled = true;
-        startHuntBtnText.textContent = `Hunting Leads in ${area || city}...`;
+        startHuntBtnText.textContent = `Hunting & Enriching Leads...`;
         startHuntSubmitBtn.querySelector('svg').outerHTML = `
             <svg class="btn-spinner" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
@@ -641,46 +646,37 @@ function bindEvents() {
             </svg>
         `;
 
-        showToast(`Started deep extraction for "${niche}" in ${area || city}, ${country}...`);
+        // Switch immediately to Leads screen and focus on target list
+        currentListFilter = targetListName;
+        listFilterSelect.value = targetListName;
+        switchScreen('leads');
 
-        try {
-            const res = await fetch('/api/hunt/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    listName: targetListName,
-                    country,
-                    state,
-                    city,
-                    area,
-                    niche,
-                    limit
-                })
-            });
+        // Show Live Hunt Banner
+        if (liveHuntBanner) {
+            liveHuntBanner.style.display = 'flex';
+            if (liveHuntQuery) liveHuntQuery.textContent = `${niche} in ${area || city}`;
+            if (liveHuntStatusText) liveHuntStatusText.textContent = 'Launching Google Maps scraper & 2-Tier AI waterfall...';
+            if (liveHuntCounter) liveHuntCounter.textContent = '0 Leads Found';
+        }
 
-            const data = await res.json();
-            if (data.success) {
-                showToast(`Extracted ${data.job.total_found} leads in ${area || city}!`);
-                
-                await Promise.all([
-                    fetchStats(),
-                    fetchCities(),
-                    fetchLists(),
-                    fetchJobs()
-                ]);
+        showToast(`Hunting "${niche}" in ${area || city}. Streaming leads in real-time...`);
 
-                // Switch to Leads screen filtered by the new list
-                currentListFilter = targetListName;
-                listFilterSelect.value = targetListName;
-                setTimeout(() => {
-                    switchScreen('leads');
-                }, 1000);
-            } else {
-                showToast('Hunt error: ' + (data.error || 'Execution failed'));
-            }
-        } catch (err) {
-            showToast('Network error while running hunt.');
-        } finally {
+        // Connect Server-Sent Events (SSE) Stream
+        const params = new URLSearchParams({
+            listName: targetListName,
+            country: country || '',
+            state: state || '',
+            city: city || '',
+            area: area || '',
+            niche: niche || '',
+            limit: String(limit)
+        });
+
+        let streamedCount = 0;
+        const sseUrl = `/api/hunt/stream?${params.toString()}`;
+        const eventSource = new EventSource(sseUrl);
+
+        function restoreHuntBtn() {
             startHuntSubmitBtn.disabled = false;
             startHuntBtnText.textContent = 'Start Lead Hunt';
             startHuntSubmitBtn.querySelector('svg').outerHTML = `
@@ -693,6 +689,60 @@ function bindEvents() {
                 </svg>
             `;
         }
+
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'start') {
+                    if (liveHuntStatusText) liveHuntStatusText.textContent = data.message || 'Extracting GMB listings...';
+                } else if (data.type === 'lead') {
+                    streamedCount++;
+                    const lead = data.lead;
+                    if (liveHuntCounter) liveHuntCounter.textContent = `${streamedCount} Leads Found`;
+                    if (liveHuntStatusText) liveHuntStatusText.textContent = `Auto-enriched: ${lead.title}`;
+
+                    // Insert or update lead in allLeads
+                    const existingIndex = allLeads.findIndex(l => l.id === lead.id || l.place_id === lead.place_id);
+                    if (existingIndex >= 0) {
+                        allLeads[existingIndex] = lead;
+                    } else {
+                        allLeads.unshift(lead);
+                    }
+
+                    // Dynamically render table with animated incoming glow
+                    applyFilters(lead.id);
+                    updateStatsLocally();
+                } else if (data.type === 'done') {
+                    eventSource.close();
+                    restoreHuntBtn();
+                    if (liveHuntStatusText) liveHuntStatusText.textContent = `Completed! ${data.total_found} leads discovered & fully enriched.`;
+                    showToast(`Hunt finished! Found ${data.total_found} leads with unified contact profiles.`);
+                    fetchStats();
+                    fetchCities();
+                    fetchLists();
+                    fetchJobs();
+                    setTimeout(() => {
+                        if (liveHuntBanner) liveHuntBanner.style.display = 'none';
+                    }, 5000);
+                } else if (data.type === 'error') {
+                    eventSource.close();
+                    restoreHuntBtn();
+                    if (liveHuntStatusText) liveHuntStatusText.textContent = `Error: ${data.message}`;
+                    showToast('Hunt error: ' + data.message);
+                }
+            } catch (parseErr) {
+                console.error('Error handling SSE stream chunk:', parseErr);
+            }
+        };
+
+        eventSource.onerror = (err) => {
+            console.error('SSE connection interrupted:', err);
+            eventSource.close();
+            restoreHuntBtn();
+            fetchLeads();
+            fetchStats();
+        };
     });
 
     closeDrawerBtn.addEventListener('click', closeDrawer);
@@ -702,7 +752,7 @@ function bindEvents() {
 // ==========================================================
 // 6. LEADS TABLE RENDERING & FILTERING
 // ==========================================================
-function applyFilters() {
+function applyFilters(incomingLeadId = null) {
     const query = searchInput.value.toLowerCase().trim();
 
     let filtered = allLeads.filter(lead => {
@@ -727,7 +777,7 @@ function applyFilters() {
         return matchesQuery && matchesPill;
     });
 
-    renderTable(filtered);
+    renderTable(filtered, incomingLeadId);
     updateFilterCounts();
 }
 
@@ -736,6 +786,18 @@ function updateFilterCounts() {
     countNoWeb.textContent = allLeads.filter(l => (l.pain_points || []).includes('no_website')).length;
     countHigh.textContent = allLeads.filter(l => (l.pain_points || []).includes('high_ticket_spender')).length;
     countRisk.textContent = allLeads.filter(l => (l.pain_points || []).includes('reputation_risk')).length;
+}
+
+function updateStatsLocally() {
+    updateFilterCounts();
+    if (statTotal) statTotal.textContent = allLeads.length;
+    if (sidebarLeadCount) sidebarLeadCount.textContent = allLeads.length;
+    const noWeb = allLeads.filter(l => (l.pain_points || []).includes('no_website')).length;
+    const high = allLeads.filter(l => (l.pain_points || []).includes('high_ticket_spender')).length;
+    const rep = allLeads.filter(l => (l.pain_points || []).includes('reputation_risk')).length;
+    if (statNoWebsite) statNoWebsite.textContent = noWeb;
+    if (statHighTicket) statHighTicket.textContent = high;
+    if (statRepRisk) statRepRisk.textContent = rep;
 }
 
 function getDirectMapsUrl(lead) {
@@ -766,7 +828,7 @@ function getDirectMapsUrl(lead) {
     return `https://www.google.com/maps/place/${encodeURIComponent(query)}/`;
 }
 
-function renderTable(leads) {
+function renderTable(leads, incomingLeadId = null) {
     showingCount.textContent = `Showing ${leads.length} of ${allLeads.length} leads`;
 
     if (leads.length === 0) {
@@ -775,6 +837,7 @@ function renderTable(leads) {
     }
 
     leadsTbody.innerHTML = leads.map(lead => {
+        const isIncoming = incomingLeadId && lead.id === incomingLeadId;
         const painPoints = Array.isArray(lead.pain_points) ? lead.pain_points : [];
         const painBadges = painPoints.map(p => {
             const label = formatPainPoint(p);
@@ -787,9 +850,10 @@ function renderTable(leads) {
         const district = lead.district_area ? `${lead.district_area}, ` : '';
         const city = lead.city || 'Lahore';
         const mapsUrl = getDirectMapsUrl(lead);
+        const firstDm = (lead.decision_makers && lead.decision_makers.length > 0) ? lead.decision_makers[0] : null;
 
         return `
-            <tr onclick="openLeadDetail(${lead.id})">
+            <tr class="${isIncoming ? 'lead-row-incoming' : ''}" onclick="openLeadDetail(${lead.id})">
                 <td>
                     <div class="lead-title-box">
                         <div class="lead-title-row">
@@ -803,7 +867,11 @@ function renderTable(leads) {
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                             </a>
                         </div>
-                        <span class="lead-category">${escapeHtml(lead.category || 'Local Business')} • <span style="color: #71717A;">${escapeHtml(lead.list_name || 'General')}</span></span>
+                        <span class="lead-category">
+                            ${escapeHtml(lead.category || 'Local Business')} • <span style="color: #71717A;">${escapeHtml(lead.list_name || 'General')}</span>
+                            ${lead.whatsapp_number ? ` • <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" onclick="event.stopPropagation();">WA: ${escapeHtml(lead.whatsapp_number)}</a>` : ''}
+                            ${firstDm ? ` • <span style="color: #18181B; font-weight: 500;">DM: ${escapeHtml(firstDm.full_name)}</span>` : ''}
+                        </span>
                     </div>
                 </td>
                 <td>
@@ -866,7 +934,7 @@ function renderDrawerContent(lead) {
 
     const dms = lead.decision_makers || [];
     const dmHtml = dms.length === 0 
-        ? `<p style="font-size: 13px; color: var(--text-secondary);">No contacts discovered yet. Run Website Crawler or Google Dork below.</p>`
+        ? `<p style="font-size: 13px; color: var(--text-secondary);">No contacts discovered yet. Run Full Waterfall Enrich below.</p>`
         : dms.map(dm => `
             <div class="detail-box" style="margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
@@ -874,20 +942,54 @@ function renderDrawerContent(lead) {
                     <span style="font-size: 11px; padding: 2px 6px; background: #E4E4E7; border-radius: 4px;">${dm.confidence_score}% Confidence</span>
                 </div>
                 <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">${escapeHtml(dm.title_role || 'Decision Maker')} (${escapeHtml(dm.email_source || 'Search')})</div>
-                ${dm.email ? `<div style="font-size: 13px;">Email: <strong>${escapeHtml(dm.email)}</strong></div>` : ''}
-                ${dm.phone ? `<div style="font-size: 13px;">Phone: <strong>${escapeHtml(dm.phone)}</strong></div>` : ''}
+                ${dm.email ? `<div style="font-size: 13px; margin-bottom: 2px;">Email: <strong>${escapeHtml(dm.email)}</strong> ${dm.confidence_score >= 80 ? '<span style="font-size: 10px; color: #15803D; background: #DCFCE7; padding: 1px 6px; border-radius: 3px; margin-left: 6px;">Verified SMTP 250 OK</span>' : ''}</div>` : ''}
+                ${dm.phone ? `<div style="font-size: 13px; margin-bottom: 2px;">Phone: <strong>${escapeHtml(dm.phone)}</strong></div>` : ''}
+                ${dm.whatsapp_number ? `<div style="font-size: 13px; margin-bottom: 2px;">WhatsApp: <a href="https://wa.me/${escapeHtml(dm.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" style="padding: 1px 6px; font-size: 11px;">${escapeHtml(dm.whatsapp_number)}</a></div>` : ''}
                 <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
                     ${dm.linkedin_url ? `<a href="${dm.linkedin_url}" target="_blank" class="web-link" style="font-size: 11px;">LinkedIn Profile</a>` : ''}
                     ${dm.facebook_url ? `<a href="${dm.facebook_url}" target="_blank" class="web-link" style="font-size: 11px;">Facebook Page</a>` : ''}
                     ${dm.instagram_url ? `<a href="${dm.instagram_url}" target="_blank" class="web-link" style="font-size: 11px;">Instagram Profile</a>` : ''}
+                    ${dm.twitter_url ? `<a href="${dm.twitter_url}" target="_blank" class="web-link" style="font-size: 11px;">Twitter/X Profile</a>` : ''}
                 </div>
             </div>
         `).join('');
+
+    const pitchSection = lead.ai_pitch ? `
+        <div class="detail-section">
+            <div class="pitch-box">
+                <div class="pitch-box-header">
+                    <span class="pitch-tag">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        AI PERSONALIZED B2B PITCH (GROQ / GEMINI)
+                    </span>
+                    <button class="pitch-copy-btn" id="copyPitchBtn" onclick="copyPitchText(this)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"></path></svg>
+                        <span>Copy Pitch</span>
+                    </button>
+                </div>
+                <div class="pitch-body-text" id="pitchBodyText">${escapeHtml(lead.ai_pitch)}</div>
+            </div>
+        </div>
+    ` : '';
 
     drawerBody.innerHTML = `
         <div class="detail-section">
             <span class="detail-heading">ACTIONS & ENRICHMENT TOOLS</span>
             <div style="display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;">
+                <button class="btn btn-primary" id="fullEnrichBtn" onclick="triggerFullEnrich(${lead.id})">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                    <span>Full Waterfall Enrich (AI + Dork + Crawl)</span>
+                </button>
+                ${lead.whatsapp_number ? `
+                    <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="btn btn-secondary" style="border-color: #22C55E; color: #15803D; font-weight: 600; text-decoration: none;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                        </svg>
+                        <span>WhatsApp (${escapeHtml(lead.whatsapp_number)})</span>
+                    </a>
+                ` : ''}
                 <a href="${mapsUrl}" target="_blank" class="btn btn-secondary" style="text-decoration: none;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -914,6 +1016,8 @@ function renderDrawerContent(lead) {
             ${!lead.website ? '<span style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Website crawl unavailable (no website recorded).</span>' : ''}
         </div>
 
+        ${pitchSection}
+
         <div class="detail-section">
             <span class="detail-heading">BUSINESS INFORMATION</span>
             <div class="detail-box">
@@ -922,6 +1026,7 @@ function renderDrawerContent(lead) {
                 <div><strong>Location:</strong> ${escapeHtml((lead.district_area ? lead.district_area + ', ' : '') + (lead.city || '') + (lead.country ? ', ' + lead.country : ''))}</div>
                 <div><strong>Address:</strong> ${escapeHtml(lead.address || 'N/A')}</div>
                 <div><strong>Phone:</strong> ${escapeHtml(lead.phone || 'N/A')}</div>
+                ${lead.whatsapp_number ? `<div><strong>WhatsApp:</strong> <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" style="padding: 1px 6px;">${escapeHtml(lead.whatsapp_number)}</a></div>` : ''}
                 <div><strong>Website:</strong> ${lead.website ? `<a href="${lead.website}" target="_blank" class="web-link">${escapeHtml(lead.website)}</a>` : '<span style="color: #71717A;">None (Pain Point)</span>'}</div>
                 <div><strong>Reputation:</strong> ★ ${lead.review_rating || 0} (${lead.review_count || 0} reviews)</div>
                 <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
@@ -943,6 +1048,60 @@ function renderDrawerContent(lead) {
     `;
 }
 
+
+window.copyPitchText = function(btn) {
+    const textEl = document.getElementById('pitchBodyText');
+    if (!textEl) return;
+    const text = textEl.innerText.trim();
+    navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg><span style="color:#15803D; font-weight:600;">Copied!</span>`;
+        setTimeout(() => { btn.innerHTML = orig; }, 2500);
+        showToast('AI cold pitch copied to clipboard!');
+    }).catch(err => {
+        showToast('Copy failed: ' + err.message);
+    });
+};
+
+window.triggerFullEnrich = async function(id) {
+    const btn = document.getElementById('fullEnrichBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>Running Waterfall (AI+Dork+Crawl)...</span>`;
+    }
+    showToast('Executing automated 2-tier waterfall enrichment...');
+
+    try {
+        const res = await fetch(`/api/leads/${id}/full-enrich`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.lead) {
+            showToast('Full Waterfall Enrichment complete!');
+            renderDrawerContent(data.lead);
+            const idx = allLeads.findIndex(l => l.id === data.lead.id);
+            if (idx >= 0) {
+                allLeads[idx] = data.lead;
+            } else {
+                allLeads.unshift(data.lead);
+            }
+            applyFilters(data.lead.id);
+            updateStatsLocally();
+        } else {
+            showToast('Enrichment error: ' + (data.error || 'Execution failed'));
+        }
+    } catch (err) {
+        showToast('Network error during enrichment: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                <span>Full Waterfall Enrich (AI + Dork + Crawl)</span>
+            `;
+        }
+    }
+};
 
 window.triggerCrawl = async function(id) {
     const btn = document.getElementById('crawlBtn');
