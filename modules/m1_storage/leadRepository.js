@@ -90,12 +90,14 @@ class LeadRepository {
                     title_role = COALESCE($2, title_role),
                     email = COALESCE($3, email),
                     linkedin_url = COALESCE($4, linkedin_url),
-                    facebook_url = COALESCE($5, facebook_url),
-                    instagram_url = COALESCE($6, instagram_url),
-                    phone = COALESCE($7, phone),
-                    confidence_score = GREATEST(confidence_score, $8),
+                    facebook_url = $5,
+                    instagram_url = $6,
+                    twitter_url = $7,
+                    whatsapp_number = COALESCE($8, whatsapp_number),
+                    phone = COALESCE($9, phone),
+                    confidence_score = GREATEST(confidence_score, $10),
                     updated_at = NOW()
-                WHERE id = $9
+                WHERE id = $11
                 RETURNING *;
             `, [
                 dmData.full_name,
@@ -104,6 +106,8 @@ class LeadRepository {
                 dmData.linkedin_url || null,
                 dmData.facebook_url || null,
                 dmData.instagram_url || null,
+                dmData.twitter_url || null,
+                dmData.whatsapp_number || null,
                 dmData.phone || null,
                 dmData.confidence_score || 50,
                 existing.rows[0].id
@@ -114,9 +118,9 @@ class LeadRepository {
         const query = `
             INSERT INTO decision_makers (
                 lead_id, full_name, title_role, email, email_source,
-                linkedin_url, facebook_url, instagram_url, phone, confidence_score, updated_at
+                linkedin_url, facebook_url, instagram_url, twitter_url, whatsapp_number, phone, confidence_score, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()
             ) RETURNING *;
         `;
 
@@ -129,6 +133,8 @@ class LeadRepository {
             dmData.linkedin_url || null,
             dmData.facebook_url || null,
             dmData.instagram_url || null,
+            dmData.twitter_url || null,
+            dmData.whatsapp_number || null,
             dmData.phone || null,
             dmData.confidence_score || 50
         ];

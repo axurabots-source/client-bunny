@@ -934,22 +934,23 @@ function renderDrawerContent(lead) {
 
     const dms = lead.decision_makers || [];
     const dmHtml = dms.length === 0 
-        ? `<p style="font-size: 13px; color: var(--text-secondary);">No contacts discovered yet. Run Full Waterfall Enrich below.</p>`
+        ? `<p style="font-size: 13px; color: var(--text-secondary);">No individual decision makers discovered yet. Run Full Waterfall Enrich below.</p>`
         : dms.map(dm => `
-            <div class="detail-box" style="margin-bottom: 8px;">
+            <div class="detail-box" style="margin-bottom: 8px; border-left: 3px solid #18181B;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <strong>${escapeHtml(dm.full_name)}</strong>
-                    <span style="font-size: 11px; padding: 2px 6px; background: #E4E4E7; border-radius: 4px;">${dm.confidence_score}% Confidence</span>
+                    <strong style="font-size: 14px;">${escapeHtml(dm.full_name)}</strong>
+                    <span style="font-size: 11px; padding: 2px 6px; background: #E4E4E7; border-radius: 4px; font-weight: 500;">${dm.confidence_score}% Confidence</span>
                 </div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">${escapeHtml(dm.title_role || 'Decision Maker')} (${escapeHtml(dm.email_source || 'Search')})</div>
-                ${dm.email ? `<div style="font-size: 13px; margin-bottom: 2px;">Email: <strong>${escapeHtml(dm.email)}</strong> ${dm.confidence_score >= 80 ? '<span style="font-size: 10px; color: #15803D; background: #DCFCE7; padding: 1px 6px; border-radius: 3px; margin-left: 6px;">Verified SMTP 250 OK</span>' : ''}</div>` : ''}
-                ${dm.phone ? `<div style="font-size: 13px; margin-bottom: 2px;">Phone: <strong>${escapeHtml(dm.phone)}</strong></div>` : ''}
-                ${dm.whatsapp_number ? `<div style="font-size: 13px; margin-bottom: 2px;">WhatsApp: <a href="https://wa.me/${escapeHtml(dm.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" style="padding: 1px 6px; font-size: 11px;">${escapeHtml(dm.whatsapp_number)}</a></div>` : ''}
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">
+                    <span style="font-weight: 500; color: #000;">${escapeHtml(dm.title_role || 'Owner / Director')}</span> • <span style="color: #71717A;">${escapeHtml(dm.email_source || 'Verified Source')}</span>
+                </div>
+                ${dm.email ? `<div style="font-size: 13px; margin-bottom: 3px;">Direct Personal Email: <strong style="color: #000;">${escapeHtml(dm.email)}</strong> ${dm.confidence_score >= 80 ? '<span style="font-size: 10px; color: #15803D; background: #DCFCE7; padding: 1px 6px; border-radius: 3px; margin-left: 6px;">Verified SMTP 250 OK</span>' : ''}</div>` : '<div style="font-size: 12px; color: #A1A1AA; margin-bottom: 3px;">Direct personal email unlisted.</div>'}
+                ${dm.phone ? `<div style="font-size: 13px; margin-bottom: 3px;">Direct Phone: <strong>${escapeHtml(dm.phone)}</strong></div>` : ''}
+                ${dm.whatsapp_number ? `<div style="font-size: 13px; margin-bottom: 3px;">Personal WhatsApp: <a href="https://wa.me/${escapeHtml(dm.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" style="padding: 1px 6px; font-size: 11px;">${escapeHtml(dm.whatsapp_number)}</a></div>` : ''}
                 <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
-                    ${dm.linkedin_url ? `<a href="${dm.linkedin_url}" target="_blank" class="web-link" style="font-size: 11px;">LinkedIn Profile</a>` : ''}
-                    ${dm.facebook_url ? `<a href="${dm.facebook_url}" target="_blank" class="web-link" style="font-size: 11px;">Facebook Page</a>` : ''}
-                    ${dm.instagram_url ? `<a href="${dm.instagram_url}" target="_blank" class="web-link" style="font-size: 11px;">Instagram Profile</a>` : ''}
-                    ${dm.twitter_url ? `<a href="${dm.twitter_url}" target="_blank" class="web-link" style="font-size: 11px;">Twitter/X Profile</a>` : ''}
+                    ${dm.linkedin_url ? `<a href="${dm.linkedin_url}" target="_blank" class="web-link" style="font-size: 11px; font-weight: 500;">Personal LinkedIn Profile</a>` : ''}
+                    ${dm.facebook_url ? `<a href="${dm.facebook_url}" target="_blank" class="web-link" style="font-size: 11px; font-weight: 500;">Personal Facebook Profile</a>` : ''}
+                    ${dm.twitter_url ? `<a href="${dm.twitter_url}" target="_blank" class="web-link" style="font-size: 11px; font-weight: 500;">Personal Twitter/X Profile</a>` : ''}
                 </div>
             </div>
         `).join('');
@@ -1019,16 +1020,23 @@ function renderDrawerContent(lead) {
         ${pitchSection}
 
         <div class="detail-section">
-            <span class="detail-heading">BUSINESS INFORMATION</span>
+            <span class="detail-heading">COMPANY / BUSINESS INFORMATION</span>
             <div class="detail-box">
+                <div><strong>Company Name:</strong> ${escapeHtml(lead.title || 'N/A')}</div>
                 <div><strong>Category:</strong> ${escapeHtml(lead.category || 'N/A')}</div>
                 <div><strong>Target List:</strong> ${escapeHtml(lead.list_name || 'General')}</div>
                 <div><strong>Location:</strong> ${escapeHtml((lead.district_area ? lead.district_area + ', ' : '') + (lead.city || '') + (lead.country ? ', ' + lead.country : ''))}</div>
                 <div><strong>Address:</strong> ${escapeHtml(lead.address || 'N/A')}</div>
                 <div><strong>Phone:</strong> ${escapeHtml(lead.phone || 'N/A')}</div>
-                ${lead.whatsapp_number ? `<div><strong>WhatsApp:</strong> <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" style="padding: 1px 6px;">${escapeHtml(lead.whatsapp_number)}</a></div>` : ''}
+                ${lead.company_email ? `<div><strong>Company General Inbox:</strong> <span style="font-weight: 600; color: #18181B;">${escapeHtml(lead.company_email)}</span> <span style="font-size: 10px; background: #F4F4F5; padding: 2px 5px; border-radius: 3px; color: #71717A;">General Inbox</span></div>` : ''}
+                ${lead.whatsapp_number ? `<div><strong>Company WhatsApp:</strong> <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" style="padding: 1px 6px;">${escapeHtml(lead.whatsapp_number)}</a></div>` : ''}
                 <div><strong>Website:</strong> ${lead.website ? `<a href="${lead.website}" target="_blank" class="web-link">${escapeHtml(lead.website)}</a>` : '<span style="color: #71717A;">None (Pain Point)</span>'}</div>
                 <div><strong>Reputation:</strong> ★ ${lead.review_rating || 0} (${lead.review_count || 0} reviews)</div>
+                <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                    ${lead.company_facebook ? `<a href="${lead.company_facebook}" target="_blank" class="web-link" style="font-size: 11px;">Company Facebook Page</a>` : ''}
+                    ${lead.company_linkedin ? `<a href="${lead.company_linkedin}" target="_blank" class="web-link" style="font-size: 11px;">Company LinkedIn Page</a>` : ''}
+                    ${lead.company_instagram ? `<a href="${lead.company_instagram}" target="_blank" class="web-link" style="font-size: 11px;">Company Instagram Handle</a>` : ''}
+                </div>
                 <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
                     <strong>Google Maps Source:</strong>
                     <a href="${mapsUrl}" target="_blank" class="web-link" style="display: inline-flex; align-items: center; gap: 4px;">
@@ -1040,7 +1048,7 @@ function renderDrawerContent(lead) {
         </div>
 
         <div class="detail-section">
-            <span class="detail-heading">DECISION MAKERS & CONTACTS (${dms.length})</span>
+            <span class="detail-heading">DECISION MAKERS & OWNERS (${dms.length})</span>
             <div id="decisionMakersBox">
                 ${dmHtml}
             </div>
