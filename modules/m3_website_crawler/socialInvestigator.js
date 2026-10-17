@@ -131,7 +131,10 @@ async function findOwnerPersonalSocials(ownerName, companyName = '', city = '') 
     return {
         personal_linkedin: personalLinkedIn,
         personal_facebook: personalFacebook,
-        personal_twitter: personalTwitter
+        personal_twitter: personalTwitter,
+        personalLinkedIn,
+        personalFacebook,
+        personalTwitter
     };
 }
 
@@ -150,7 +153,35 @@ function isGenericGatekeeperEmail(email) {
     return GENERIC_EMAIL_PREFIXES.has(user);
 }
 
+
+/**
+ * Targeted search engine dork for owner personal email footprints
+ */
+async function dorkOwnerSocialEmail(ownerName, companyName = '', domain = '') {
+    if (!ownerName || ownerName.length < 3) return null;
+    try {
+        const query = '"' + ownerName + '" "' + companyName + '" ("@gmail.com" OR "@yahoo.com" OR "@hotmail.com"' + (domain ? ' OR "@' + domain + '"' : '') + ')';
+        const searchUrl = 'https://www.bing.com/search?q=' + encodeURIComponent(query) + '&count=4';
+        const res = await fetch(searchUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+            signal: AbortSignal.timeout(4000)
+        });
+        if (res.status === 200) {
+            const html = await res.text();
+            const emails = html.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g) || [];
+            for (const em of emails) {
+                const clean = em.toLowerCase().trim();
+                if (!clean.includes('%') && !clean.includes('bing.com') && !clean.includes('microsoft.com') && !clean.endsWith('.png') && !clean.endsWith('.jpg') && clean.split('@')[0].length >= 3) {
+                    return clean;
+                }
+            }
+        }
+    } catch {}
+    return null;
+}
+
 module.exports = {
+    dorkOwnerSocialEmail,
     isPersonalLinkedInUrl,
     isPersonalFacebookUrl,
     findOwnerPersonalSocials,

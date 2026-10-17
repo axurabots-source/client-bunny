@@ -242,9 +242,38 @@ async function executeLiveHunt({ listName, country, state, city, area, niche, li
         console.warn(`⚠️ No Google Maps listings found for "${fullQuery}".`);
     }
 
-    // 6. Save ALL 100% REAL leads into Supabase under listName & stream them one by one
+    // 6. Save ALL 100% REAL leads into Supabase under listName with Deduplication
     const savedLeads = [];
+    let skippedDuplicates = 0;
+
     for (const lead of extractedLeads) {
+        // DEDUPLICATION: Skip if lead is already in this list
+        try {
+            const checkQuery = `
+                SELECT id FROM leads 
+                WHERE list_name = $1::text 
+                  AND (
+                    (place_id = $2::text AND place_id IS NOT NULL AND place_id != '')
+                    OR (LOWER(TRIM(title)) = LOWER(TRIM($3::text)) AND LOWER(TRIM(city)) = LOWER(TRIM($4::text)))
+                    OR (website IS NOT NULL AND website != '' AND $5::text != '' AND LOWER(TRIM(website)) = LOWER(TRIM($5::text)))
+                  )
+                LIMIT 1;
+            `;
+            const checkRes = await pool.query(checkQuery, [
+                listName || 'General Ingestion',
+                lead.place_id,
+                lead.title,
+                lead.city,
+                lead.website || ''
+            ]);
+            if (checkRes.rows.length > 0) {
+                console.log(`⏭️ [Deduplication] Skipped already existing lead in "${listName}": ${lead.title}`);
+                skippedDuplicates++;
+                continue;
+            }
+        } catch (checkErr) {
+            console.warn("Deduplication check note:", checkErr.message);
+        }
         const painPoints = tagPainPoints({
             website: lead.website,
             review_count: lead.review_count,
@@ -310,12 +339,19 @@ async function executeLiveHunt({ listName, country, state, city, area, niche, li
         niche
     ]);
 
-    console.log(`✅ Successfully stored ${savedLeads.length} 100% REAL Google Maps leads under list "${listName}"!`);
+    console.log(`✅ Successfully processed ${extractedLeads.length} leads: ${savedLeads.length} new added, ${skippedDuplicates} duplicates skipped for "${listName}".`);
     return {
         query: fullQuery,
         listName,
-        totalFound: savedLeads.length,
-        leads: savedLeads
+        totalFound: extractedLeads.length,
+        newLeadsCount: savedLeads.length,
+        skippedDuplicates: skippedDuplicates,
+        leads: savedLeads,
+        message: savedLeads.length === 0
+            ? (extractedLeads.length === 0 
+                ? "No matching businesses found on Google Maps for this search."
+                : `All ${extractedLeads.length} businesses found in this area are already in "${listName}". No duplicates were added.`)
+            : `Successfully added ${savedLeads.length} new verified leads (${skippedDuplicates} duplicates skipped).`
     };
 }
 

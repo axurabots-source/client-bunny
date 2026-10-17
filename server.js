@@ -26,15 +26,16 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-// 2. List Leads with filtering
+// 2. List Leads with filtering (status, city, country, list_name, pain_point)
 app.get('/api/leads', async (req, res) => {
     try {
-        const { status, city, country, list_name, limit = 100, offset = 0 } = req.query;
+        const { status, city, country, list_name, pain_point, limit = 100, offset = 0 } = req.query;
         const leads = await LeadRepository.listLeads({
             status,
             city,
             country,
             list_name,
+            pain_point,
             limit: parseInt(limit, 10),
             offset: parseInt(offset, 10)
         });
@@ -45,7 +46,7 @@ app.get('/api/leads', async (req, res) => {
     }
 });
 
-// 3. Get Single Lead with Decision Makers
+// 3. Get Single Lead with Decision Makers & Outreach History
 app.get('/api/leads/:id', async (req, res) => {
     try {
         const lead = await LeadRepository.getLeadById(req.params.id);
@@ -59,20 +60,15 @@ app.get('/api/leads/:id', async (req, res) => {
     }
 });
 
-// 3.5. Trigger Deep Crawl on a Lead's Website
-app.post('/api/leads/:id/enrich', async (req, res) => {
+// 3.5. Trigger Deep Enrich on Single Lead (runs Crawler + Dorking)
+app.post(['/api/leads/:id/enrich', '/api/leads/:id/full-enrich'], async (req, res) => {
     try {
-        const { crawlWebsite } = require('./modules/m3_website_crawler/crawler');
-        const lead = await LeadRepository.getLeadById(req.params.id);
-        if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
-        if (!lead.website) return res.status(400).json({ success: false, error: 'Lead has no website to crawl' });
-
-        const crawlResult = await crawlWebsite(lead.website, lead.id);
-        const updatedLead = await LeadRepository.getLeadById(lead.id);
-
-        res.json({ success: true, crawlResult, lead: updatedLead });
+        const { autoEnrichLead } = require('./modules/m3_website_crawler/autoEnricher');
+        const enrichedLead = await autoEnrichLead(req.params.id);
+        if (!enrichedLead) return res.status(404).json({ success: false, error: 'Lead not found' });
+        res.json({ success: true, lead: enrichedLead });
     } catch (err) {
-        console.error("Error enriching lead:", err);
+        console.error("Error running deep enrich:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -94,15 +90,141 @@ app.post('/api/leads/:id/dork', async (req, res) => {
     }
 });
 
-// 3.7. All-in-One Full Enrichment (Crawl + Groq Bio + WhatsApp + Dork + AI Pitch)
-app.post('/api/leads/:id/full-enrich', async (req, res) => {
+// 3.8. On-Demand AI Cold Pitch Generation (Gemini Flash / Groq - 3-Step Framework)
+app.post(['/api/leads/:id/pitch', '/api/leads/:id/generate-pitch'], async (req, res) => {
     try {
-        const { autoEnrichLead } = require('./modules/m3_website_crawler/autoEnricher');
-        const enrichedLead = await autoEnrichLead(req.params.id);
-        if (!enrichedLead) return res.status(404).json({ success: false, error: 'Lead not found' });
-        res.json({ success: true, lead: enrichedLead });
+        const lead = await LeadRepository.getLeadById(req.params.id);
+        if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
+
+        const { generateMultiChannelPitch } = require('./modules/m6_ai_engine/aiIntelligence');
+        const dms = await LeadRepository.getDecisionMakers(lead.id);
+        const topDecisionMaker = (dms && dms.length > 0) ? dms[0] : { full_name: lead.gmb_owner_name || 'Owner', title_role: 'Founder' };
+
+        const pitchData = await generateMultiChannelPitch(lead, topDecisionMaker);
+
+        // Update database with the newly generated pitch
+        await pool.query(`UPDATE leads SET ai_pitch = $1, updated_at = NOW() WHERE id = $2`, [pitchData.email_body || pitchData, lead.id]);
+
+        res.json({ success: true, pitch: pitchData.email_body, multiChannel: pitchData, leadId: lead.id });
     } catch (err) {
-        console.error("Error running full enrich:", err);
+        console.error("Error generating pitch:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 3.10. Send Approved Cold Email (Outreach Dispatcher)
+app.post(['/api/outreach/send', '/api/leads/:id/send-email'], async (req, res) => {
+    try {
+        const leadId = req.params.id || req.body.leadId;
+        const { smtpConfig, to, subject, message, decisionMakerId } = req.body;
+
+        if (!smtpConfig || !smtpConfig.user || !smtpConfig.pass) {
+            return res.status(400).json({ success: false, error: 'Please configure your Email Settings before sending.' });
+        }
+        if (!to || !to.includes('@')) {
+            return res.status(400).json({ success: false, error: 'Valid recipient email address is required.' });
+        }
+        if (!subject || !subject.trim()) {
+            return res.status(400).json({ success: false, error: 'Email subject cannot be empty.' });
+        }
+        if (!message || !message.trim()) {
+            return res.status(400).json({ success: false, error: 'Email message body cannot be empty.' });
+        }
+
+        const lead = leadId ? await LeadRepository.getLeadById(leadId) : null;
+        const { sendOutreachEmail } = require('./modules/m5_email_dispatcher/mailer');
+        const sendResult = await sendOutreachEmail(smtpConfig, {
+            leadId: lead ? lead.id : null,
+            decisionMakerId: decisionMakerId || null,
+            to: to.trim(),
+            subject: subject.trim(),
+            bodyText: message.trim()
+        });
+
+        res.json({
+            success: true,
+            message: `Email sent to ${to.trim()} successfully!`,
+            messageId: sendResult.messageId,
+            log: sendResult.log
+        });
+    } catch (err) {
+        console.error("Error sending email:", err);
+        res.status(500).json({ success: false, error: err.message || 'Failed to dispatch email.' });
+    }
+});
+
+// 3.9. Test SMTP Connection with User's Frontend Credentials
+app.post('/api/email/test-connection', async (req, res) => {
+    try {
+        const { smtpConfig } = req.body;
+        if (!smtpConfig || !smtpConfig.user || !smtpConfig.pass) {
+            return res.status(400).json({ success: false, error: 'Missing SMTP credentials (User and App Password are required).' });
+        }
+
+        const { verifySmtp } = require('./modules/m5_email_dispatcher/mailer');
+        await verifySmtp(smtpConfig);
+
+        res.json({ success: true, message: 'SMTP Connection verified successfully! You are ready to send cold emails.' });
+    } catch (err) {
+        console.error("SMTP Test Error:", err.message);
+        res.status(400).json({ success: false, error: err.message || 'SMTP Handshake failed.' });
+    }
+});
+
+// 3.10. Send Cold Email using User's Frontend Credentials
+app.post('/api/leads/:id/send-email', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { smtpConfig, to, subject, message, decisionMakerId } = req.body;
+
+        if (!smtpConfig || !smtpConfig.user || !smtpConfig.pass) {
+            return res.status(400).json({ success: false, error: 'Please configure your Email Settings before sending.' });
+        }
+        if (!to || !to.includes('@')) {
+            return res.status(400).json({ success: false, error: 'Valid recipient email address is required.' });
+        }
+        if (!subject || !subject.trim()) {
+            return res.status(400).json({ success: false, error: 'Email subject cannot be empty.' });
+        }
+        if (!message || !message.trim()) {
+            return res.status(400).json({ success: false, error: 'Email message body cannot be empty.' });
+        }
+
+        const lead = await LeadRepository.getLeadById(id);
+        if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
+
+        const { sendOutreachEmail } = require('./modules/m5_email_dispatcher/mailer');
+        const sendResult = await sendOutreachEmail(smtpConfig, {
+            leadId: lead.id,
+            decisionMakerId: decisionMakerId || null,
+            to: to.trim(),
+            subject: subject.trim(),
+            bodyText: message.trim()
+        });
+
+        res.json({
+            success: true,
+            message: `Email sent to ${to.trim()} successfully!`,
+            messageId: sendResult.messageId,
+            log: sendResult.log
+        });
+    } catch (err) {
+        console.error("Error sending email:", err);
+        res.status(500).json({ success: false, error: err.message || 'Failed to dispatch email.' });
+    }
+});
+
+// 3.11. Get Outreach History for a Lead
+app.get('/api/leads/:id/outreach-logs', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(`
+            SELECT * FROM outreach_logs 
+            WHERE lead_id = $1 
+            ORDER BY created_at DESC;
+        `, [id]);
+        res.json({ success: true, logs: result.rows });
+    } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -222,12 +344,15 @@ app.post('/api/hunt/start', async (req, res) => {
             state = '',
             city = 'Lahore',
             area = '',
-            niche = 'Dentists',
+            niche,
+            query,
             limit = 35
         } = req.body;
 
-        if (!city || !niche) {
-            return res.status(400).json({ success: false, error: 'City and Niche are required' });
+        const effectiveNiche = (niche && niche.trim()) ? niche.trim() : (query ? query.trim() : 'Dentists');
+
+        if (!city || !effectiveNiche) {
+            return res.status(400).json({ success: false, error: 'City and Niche/Query are required' });
         }
 
         // Anti-ban safety guard: hard cap at 45 leads max
@@ -236,7 +361,7 @@ app.post('/api/hunt/start', async (req, res) => {
         if (cappedLimit < 15) cappedLimit = 15;
 
         const jobId = `hunt_${Date.now()}`;
-        const fullQuery = `${niche} in ${area ? area + ', ' : ''}${city}, ${country}`;
+        const fullQuery = `${effectiveNiche} in ${area ? area + ', ' : ''}${city}, ${country}`;
 
         // 1. Insert job into Supabase
         await pool.query(`
@@ -251,7 +376,7 @@ app.post('/api/hunt/start', async (req, res) => {
             state,
             city,
             area,
-            niche,
+            niche: effectiveNiche,
             limit: cappedLimit
         });
 
@@ -324,7 +449,13 @@ app.get('/api/hunt/stream', async (req, res) => {
             }
         });
 
-        sendEvent({ type: 'done', totalFound: huntResult.totalFound });
+        sendEvent({ 
+              type: 'done', 
+              totalFound: huntResult.totalFound,
+              newLeadsCount: huntResult.newLeadsCount !== undefined ? huntResult.newLeadsCount : (huntResult.leads ? huntResult.leads.length : 0),
+              skippedDuplicates: huntResult.skippedDuplicates || 0,
+              message: huntResult.message
+          });
         res.end();
     } catch (err) {
         console.error("Hunt stream error:", err);
@@ -339,21 +470,25 @@ app.use((req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const server = app.listen(PORT, () => {
-    console.log(`=================================================`);
-    console.log(`🚀 CLIENT BUNNY DASHBOARD RUNNING AT:`);
-    console.log(`   http://localhost:${PORT}`);
-    console.log(`=================================================`);
-});
+if (require.main === module) {
+    const server = app.listen(PORT, () => {
+        console.log(`=================================================`);
+        console.log(`🚀 CLIENT BUNNY DASHBOARD RUNNING AT:`);
+        console.log(`   http://localhost:${PORT}`);
+        console.log(`=================================================`);
+    });
 
-server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-        const altPort = 3005;
-        console.log(`Port ${PORT} in use, retrying on port ${altPort}...`);
-        app.listen(altPort, () => {
-            console.log(`🚀 CLIENT BUNNY DASHBOARD RUNNING AT: http://localhost:${altPort}`);
-        });
-    } else {
-        console.error("Server error:", err);
-    }
-});
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            const altPort = 3005;
+            console.log(`Port ${PORT} in use, retrying on port ${altPort}...`);
+            app.listen(altPort, () => {
+                console.log(`🚀 CLIENT BUNNY DASHBOARD RUNNING AT: http://localhost:${altPort}`);
+            });
+        } else {
+            console.error("Server error:", err);
+        }
+    });
+}
+
+module.exports = app;

@@ -2,8 +2,26 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Client Bunny — Lead Intelligence & CRM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Client Bunny — Autonomous B2B Lead Hunter & CRM</title>
+    
+    <!-- PWA Web App Manifest & Theme Configuration -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0A0A0A">
+    <meta name="description" content="Autonomous B2B Lead Hunting, Waterfall Contact Enrichment & Cold Outreach CRM Command Center">
+    
+    <!-- Apple / iOS Standalone PWA Support -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Client Bunny">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -72,6 +90,9 @@
         </nav>
     </aside>
 
+    <!-- MOBILE SIDEBAR BACKDROP OVERLAY -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
     <!-- MAIN CRM CONTENT AREA -->
     <div class="crm-main">
         
@@ -95,6 +116,32 @@
             </div>
 
             <div class="header-actions">
+                <!-- PWA Offline Status Pill (auto-shown when disconnected) -->
+                <div id="pwaOfflineBadge" class="pwa-offline-badge" style="display: none;">
+                    <span class="pwa-offline-dot"></span>
+                    <span>Offline (Cached)</span>
+                </div>
+
+                <!-- PWA Install App Button -->
+                <button class="btn btn-secondary" id="pwaInstallBtn" style="display: none; align-items: center; gap: 6px;" title="Install Client Bunny on your device">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    <span>Install App</span>
+                </button>
+
+                <!-- Header Email Settings Button -->
+                <button class="btn btn-secondary" id="emailSettingsBtn" title="Configure Outreach Email / SMTP" style="display: inline-flex; align-items: center; gap: 8px;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    <span id="emailStatusBadgeText">Email Settings</span>
+                    <span class="status-dot" id="emailStatusDot" style="width: 8px; height: 8px; border-radius: 50%; background-color: #A1A1AA; display: inline-block;"></span>
+                </button>
+
                 <!-- Header Hunt Shortcut Button -->
                 <button class="btn btn-primary" id="headerHuntBtn">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -117,13 +164,12 @@
                 <section class="section-hero">
                     <div class="hero-left">
                         <h1 class="page-title">Leads Pipeline</h1>
-                        <p class="page-subtitle">Extracted business records enriched with pain points, contact info, and website health.</p>
+                        <p class="page-subtitle">Isolated campaign records with verified decision makers, emails, and direct outreach.</p>
                     </div>
                     <div class="hero-right">
-                        <!-- Target List & Location Filter Dropdowns -->
                         <div class="filters-cluster">
                             <div class="filter-select-box">
-                                <label for="listFilterSelect">List:</label>
+                                <label for="listFilterSelect">Switch List:</label>
                                 <select id="listFilterSelect" class="select-input">
                                     <option value="all">All Lists</option>
                                 </select>
@@ -138,27 +184,46 @@
                     </div>
                 </section>
 
+                <!-- Active List Isolation Bar -->
+                <div class="active-list-bar card-border" id="activeListBar">
+                    <div class="active-list-left">
+                        <span class="active-list-pill">ACTIVE CAMPAIGN LIST</span>
+                        <h2 class="active-list-name" id="activeListNameDisplay">All Lists</h2>
+                        <span class="active-list-count" id="activeListCountDisplay">21 leads</span>
+                    </div>
+                    <div class="active-list-right">
+                        <button class="btn btn-primary" id="reHuntListBtn" onclick="reHuntCurrentList()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="16"></line>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                            </svg>
+                            <span>Add More Leads To This List</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Metrics Strip -->
                 <section class="metrics-grid">
                     <div class="metric-card">
-                        <span class="metric-label">TOTAL LEADS</span>
+                        <span class="metric-label">TOTAL SCRAPED</span>
                         <div class="metric-value" id="statTotal">—</div>
-                        <span class="metric-sub">In Supabase DB</span>
+                        <span class="metric-sub">Leads in Pipeline</span>
                     </div>
                     <div class="metric-card">
-                        <span class="metric-label">NO WEBSITE</span>
-                        <div class="metric-value highlight" id="statNoWebsite">—</div>
-                        <span class="metric-sub">High conversion targets</span>
+                        <span class="metric-label">EMAILS SENT TODAY</span>
+                        <div class="metric-value highlight" id="statEmailsSentToday">0 / 30 limit</div>
+                        <span class="metric-sub">Daily Gmail safety quota</span>
                     </div>
                     <div class="metric-card">
-                        <span class="metric-label">HIGH SPENDERS</span>
-                        <div class="metric-value" id="statHighTicket">—</div>
-                        <span class="metric-sub">150+ reviews, high budget</span>
+                        <span class="metric-label">REPLIES RECEIVED</span>
+                        <div class="metric-value" id="statRepliesReceived">0</div>
+                        <span class="metric-sub">Direct prospect responses</span>
                     </div>
                     <div class="metric-card">
-                        <span class="metric-label">REPUTATION RISKS</span>
-                        <div class="metric-value" id="statRepRisk">—</div>
-                        <span class="metric-sub">Critical review complaints</span>
+                        <span class="metric-label">ENRICHED LEADS</span>
+                        <div class="metric-value" id="statEnrichedPercent">0%</div>
+                        <span class="metric-sub">Crawler & Dork verified</span>
                     </div>
                 </section>
 
@@ -196,16 +261,17 @@
                         <table class="leads-table">
                             <thead>
                                 <tr>
-                                    <th style="width: 28%;">CLINIC / BUSINESS</th>
-                                    <th style="width: 14%;">REPUTATION</th>
-                                    <th style="width: 22%;">LOCATION & CONTACT</th>
-                                    <th style="width: 24%;">DETECTED PAIN POINTS</th>
-                                    <th style="width: 12%; text-align: right;">ACTION</th>
+                                    <th style="width: 25%;">BUSINESS & LOCATION</th>
+                                    <th style="width: 8%;">RATING</th>
+                                    <th style="width: 15%;">PAIN POINTS</th>
+                                    <th style="width: 20%;">DECISION MAKER</th>
+                                    <th style="width: 8%;">STATUS</th>
+                                    <th style="width: 24%; text-align: right;">ACTIONS</th>
                                 </tr>
                             </thead>
                             <tbody id="leadsTbody">
                                 <tr>
-                                    <td colspan="5" class="table-loading">Loading leads from Supabase...</td>
+                                    <td colspan="6" class="table-loading">Loading leads from Supabase...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -230,160 +296,103 @@
                 </section>
 
                 <div class="hunt-grid">
-                    <!-- Left: Hunt Configuration Form -->
+                    <!-- Left: Clean Minimal Hunt Form -->
                     <div class="hunt-panel card-border">
-                        <div class="panel-header">
-                            <span class="panel-tag">EXTRACTION PROTOCOL</span>
-                            <h3 class="panel-title">Configure Target Campaign</h3>
+                        <div class="panel-header" style="margin-bottom: 24px;">
+                            <h3 class="panel-title" style="font-size: 18px; font-weight: 600;">Hunt Configuration</h3>
                         </div>
 
-                        <form id="huntForm" class="hunt-form">
+                        <form id="huntForm" class="hunt-form-minimal">
                             
-                            <!-- STEP 1: CAMPAIGN / TARGET LIST -->
-                            <div class="form-section-box">
-                                <div class="form-section-header">
-                                    <span class="step-badge">1</span>
-                                    <h4>Target List / Campaign</h4>
+                            <!-- Target List -->
+                            <div class="form-group" style="margin-bottom: 20px;">
+                                <label class="field-label-clean" for="huntListSelect">TARGET LIST</label>
+                                <div class="list-choice-box" style="display: flex; gap: 8px;">
+                                    <select id="huntListSelect" class="form-input" style="flex: 1;" required>
+                                        <option value="">Select a list...</option>
+                                    </select>
+                                    <button type="button" class="btn btn-secondary" id="toggleNewListBtn">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        </svg>
+                                        <span>New List</span>
+                                    </button>
                                 </div>
-                                <div class="form-group">
-                                    <label for="huntListSelect">SELECT EXISTING LIST OR CREATE NEW</label>
-                                    <div class="list-choice-box">
-                                        <select id="huntListSelect" class="form-input" style="flex: 1;">
-                                            <option value="">Loading lists...</option>
-                                        </select>
-                                        <button type="button" class="btn btn-secondary" id="toggleNewListBtn">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                            </svg>
-                                            <span>New List</span>
-                                        </button>
-                                    </div>
-                                    
-                                    <!-- Inline New List Creator (Collapsible) -->
-                                    <div class="inline-new-list" id="inlineNewListBox" style="display: none;">
-                                        <div class="form-group">
-                                            <label for="newListNameInput">NEW LIST NAME</label>
-                                            <input type="text" id="newListNameInput" class="form-input" placeholder="e.g. Dubai Aesthetics Q4, Karachi Clinics...">
-                                        </div>
-                                        <div class="form-group" style="margin-bottom: 0;">
-                                            <label for="newListDescInput">CAMPAIGN DESCRIPTION (OPTIONAL)</label>
-                                            <input type="text" id="newListDescInput" class="form-input" placeholder="e.g. Untargeted clinic owners for website redesign pitch">
-                                        </div>
-                                    </div>
+                                <div class="inline-new-list" id="inlineNewListBox" style="display: none; margin-top: 10px;">
+                                    <input type="text" id="newListNameInput" class="form-input" placeholder="Enter new list name (e.g. Manchester Printers, London Clinics)...">
                                 </div>
                             </div>
 
-                            <!-- STEP 2: CASCADING GEOGRAPHIC TARGETING -->
-                            <div class="form-section-box">
-                                <div class="form-section-header">
-                                    <span class="step-badge">2</span>
-                                    <h4>Geographic Target Hierarchy</h4>
+                            <!-- Niche / Category -->
+                            <div class="form-group" style="margin-bottom: 20px;">
+                                <label class="field-label-clean" for="huntNiche">BUSINESS CATEGORY / NICHE</label>
+                                <input type="text" id="huntNiche" class="form-input" placeholder="e.g. Dentists, Print Shops, Real Estate, Restaurants" required value="Dentists">
+                                <div class="niche-pills-row" id="nicheChips" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+                                    <span class="niche-chip active" data-niche="Dentists">Dentists</span>
+                                    <span class="niche-chip" data-niche="Print Shops">Print Shops</span>
+                                    <span class="niche-chip" data-niche="Real Estate">Real Estate</span>
+                                    <span class="niche-chip" data-niche="Restaurants">Restaurants</span>
+                                    <span class="niche-chip" data-niche="Law Firms">Law Firms</span>
+                                    <span class="niche-chip" data-niche="Salons & Spas">Salons</span>
+                                    <span class="niche-chip" data-niche="Schools & Colleges">Schools</span>
                                 </div>
+                            </div>
 
-                                <!-- Dynamic Hierarchy Breadcrumb Preview -->
-                                <div class="target-preview-bar">
-                                    <span class="preview-label">Location Path:</span>
-                                    <span class="target-step-tag" id="pathCountry">Pakistan</span>
-                                    <span class="target-arrow">→</span>
-                                    <span class="target-step-tag" id="pathRegion">Punjab</span>
-                                    <span class="target-arrow">→</span>
-                                    <span class="target-step-tag" id="pathCity">Lahore</span>
-                                    <span class="target-arrow">→</span>
-                                    <span class="target-step-tag" id="pathArea">Gulberg</span>
-                                </div>
-
-                                <!-- Cascading Dropdowns: Country & Region -->
-                                <div class="form-row">
-                                    <div class="form-group half">
-                                        <label for="huntCountry">TARGET COUNTRY</label>
+                            <!-- Location Fields -->
+                            <div class="form-group" style="margin-bottom: 20px;">
+                                <label class="field-label-clean">TARGET LOCATION</label>
+                                <div class="form-row" style="display: flex; gap: 12px; margin-bottom: 10px;">
+                                    <div class="form-group half" style="flex: 1; margin: 0;">
                                         <select id="huntCountry" class="form-input" required>
-                                            <option value="">Loading countries...</option>
+                                            <option value="">Select Country</option>
                                         </select>
                                     </div>
-                                    <div class="form-group half">
-                                        <label for="huntRegion">REGION / STATE / PROVINCE</label>
+                                    <div class="form-group half" style="flex: 1; margin: 0;">
                                         <select id="huntRegion" class="form-input" required>
-                                            <option value="">Select Country first</option>
+                                            <option value="">Select Region</option>
                                         </select>
                                     </div>
                                 </div>
-
-                                <!-- Cascading Dropdowns: City & District/Area -->
-                                <div class="form-row">
-                                    <div class="form-group half">
-                                        <label for="huntCity">CITY</label>
+                                <div class="form-row" style="display: flex; gap: 12px;">
+                                    <div class="form-group half" style="flex: 1; margin: 0;">
                                         <select id="huntCity" class="form-input" required>
-                                            <option value="">Select Region first</option>
+                                            <option value="">Select City</option>
                                         </select>
                                     </div>
-                                    <div class="form-group half">
-                                        <label for="huntArea">DISTRICT / AREA / SUB-LOCALITY</label>
+                                    <div class="form-group half" style="flex: 1; margin: 0;">
                                         <select id="huntArea" class="form-input">
-                                            <option value="">Select City first</option>
+                                            <option value="">All Areas / Central</option>
                                         </select>
                                     </div>
                                 </div>
-
-                                <!-- Custom Area Specific Text Input (if chosen) -->
-                                <div class="form-group" id="customAreaBox" style="display: none;">
-                                    <label for="customAreaInput">SPECIFIC SECTOR / STREET / CUSTOM LOCALITY</label>
-                                    <input type="text" id="customAreaInput" class="form-input" placeholder="Type exact sector, street, or commercial plaza name...">
+                                <div class="form-group" id="customAreaBox" style="display: none; margin-top: 10px; margin-bottom: 0;">
+                                    <input type="text" id="customAreaInput" class="form-input" placeholder="Specific locality, sector or street...">
                                 </div>
                             </div>
 
-                            <!-- STEP 3: BUSINESS NICHE & EXTRACTION PARAMETERS -->
-                            <div class="form-section-box">
-                                <div class="form-section-header">
-                                    <span class="step-badge">3</span>
-                                    <h4>Business Niche & Target Quantity</h4>
+                            <!-- Limit -->
+                            <div class="form-group" style="margin-bottom: 24px;">
+                                <label class="field-label-clean">BATCH SIZE</label>
+                                <div class="limit-buttons-group" style="display: flex; gap: 8px;">
+                                    <button type="button" class="limit-btn" data-limit="20">20 Leads</button>
+                                    <button type="button" class="limit-btn active" data-limit="35">35 Leads (Optimal)</button>
+                                    <button type="button" class="limit-btn" data-limit="45">45 Leads (Max)</button>
                                 </div>
-
-                                <div class="form-group">
-                                    <label for="huntNiche">BUSINESS NICHE / KEYWORD</label>
-                                    <input type="text" id="huntNiche" class="form-input" placeholder="e.g. Dentists, Dermatologists, Plastic Surgeons..." value="Dentists" required>
-                                    <div class="quick-chips" id="nicheChips">
-                                        <button type="button" class="chip" data-val="Dentists">Dentists</button>
-                                        <button type="button" class="chip" data-val="Dermatologists">Dermatologists</button>
-                                        <button type="button" class="chip" data-val="Plastic Surgeons">Plastic Surgeons</button>
-                                        <button type="button" class="chip" data-val="Gyms & Fitness">Gyms & Fitness</button>
-                                        <button type="button" class="chip" data-val="Real Estate Agencies">Real Estate</button>
-                                        <button type="button" class="chip" data-val="Law Firms">Law Firms</button>
-                                    </div>
-                                </div>
-
-                                <div class="form-row">
-                                    <div class="form-group half">
-                                        <label for="huntLimit">TARGET QUANTITY (ANTI-BAN SAFE CAP)</label>
-                                        <select id="huntLimit" class="form-input">
-                                            <option value="30">30 Leads (Fast & Safe)</option>
-                                            <option value="35" selected>35 Leads (Recommended Default)</option>
-                                            <option value="40">40 Leads (Optimized Deep)</option>
-                                            <option value="45">45 Leads (Maximum Safe Limit)</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group half">
-                                        <label for="huntEngine">EXTRACTION ENGINE</label>
-                                        <select id="huntEngine" class="form-input">
-                                            <option value="playwright" selected>Headless Browser & Local Maps</option>
-                                        </select>
-                                    </div>
-                                </div>
+                                <input type="hidden" id="huntLimit" value="35">
                             </div>
 
-                            <!-- Submit CTA -->
-                            <div class="form-actions">
-                                <button type="submit" class="btn btn-primary btn-large" id="startHuntSubmitBtn">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <line x1="22" y1="12" x2="18" y2="12"></line>
-                                        <line x1="6" y1="12" x2="2" y2="12"></line>
-                                        <line x1="12" y1="6" x2="12" y2="2"></line>
-                                        <line x1="12" y1="22" x2="12" y2="18"></line>
-                                    </svg>
-                                    <span id="startHuntBtnText">Start Lead Hunt</span>
-                                </button>
-                            </div>
+                            <!-- Launch Button -->
+                            <button type="submit" class="btn btn-primary btn-block btn-lg" id="startHuntSubmitBtn" style="width: 100%; justify-content: center; height: 46px; font-weight: 600;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="22" y1="12" x2="18" y2="12"></line>
+                                    <line x1="6" y1="12" x2="2" y2="12"></line>
+                                    <line x1="12" y1="6" x2="12" y2="2"></line>
+                                    <line x1="12" y1="22" x2="12" y2="18"></line>
+                                </svg>
+                                <span id="startHuntBtnText">Start Live Hunt</span>
+                            </button>
                         </form>
                     </div>
 
@@ -489,6 +498,249 @@
             <!-- Dynamically populated -->
         </div>
     </aside>
+
+    <!-- ==========================================================
+         MODAL 1: EMAIL & SMTP SETTINGS (FRONTEND CONFIGURABLE)
+         ========================================================== -->
+    <div class="modal-overlay" id="emailSettingsModalOverlay" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <span class="drawer-tag">OUTREACH SETTINGS</span>
+                    <h3 class="modal-title">Email & SMTP Configuration</h3>
+                </div>
+                <button class="close-btn" id="closeSmtpModalBtn" aria-label="Close Settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+                    Enter your email credentials below. They are saved securely in your browser so you can send cold emails directly to business owners without exposing credentials in backend files.
+                </p>
+
+                <!-- Quick Presets -->
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <button type="button" class="btn btn-secondary btn-sm" id="presetGmailBtn" style="font-size: 12px; font-weight: 500;">Use Gmail (Default)</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="presetZohoBtn" style="font-size: 12px; font-weight: 500;">Use Zoho / Custom</button>
+                </div>
+
+                <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div class="form-group" style="grid-column: span 1;">
+                        <label class="form-label" for="smtpSenderName">Sender Display Name</label>
+                        <input type="text" id="smtpSenderName" class="form-input" placeholder="e.g. Hamza | Client Partner">
+                    </div>
+                    <div class="form-group" style="grid-column: span 1;">
+                        <label class="form-label" for="smtpSenderEmail">Your Email Address *</label>
+                        <input type="email" id="smtpSenderEmail" class="form-input" placeholder="e.g. yourname@gmail.com">
+                    </div>
+                </div>
+
+                <div class="form-grid" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div class="form-group">
+                        <label class="form-label" for="smtpHost">SMTP Host</label>
+                        <input type="text" id="smtpHost" class="form-input" value="smtp.gmail.com" placeholder="smtp.gmail.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="smtpPort">Port</label>
+                        <input type="number" id="smtpPort" class="form-input" value="465" placeholder="465">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="smtpSecure">Security</label>
+                        <select id="smtpSecure" class="select-input" style="height: 38px; width: 100%;">
+                            <option value="true">SSL (465)</option>
+                            <option value="false">TLS (587)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <label class="form-label" for="smtpPass">App Password / SMTP Password *</label>
+                        <a href="https://myaccount.google.com/apppasswords" target="_blank" style="font-size: 11px; color: #2563EB; text-decoration: none;">Get Gmail App Password →</a>
+                    </div>
+                    <div style="position: relative;">
+                        <input type="password" id="smtpPass" class="form-input" placeholder="16-character App Password (e.g. abcd efgh ijkl mnop)" style="padding-right: 40px;">
+                        <button type="button" id="toggleSmtpPassBtn" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #71717A; font-size: 12px;">Show</button>
+                    </div>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        💡 For Gmail: Go to Google Account Security → 2-Step Verification → App Passwords to generate your 16-letter code.
+                    </p>
+                </div>
+
+                <!-- Test Result Banner -->
+                <div id="smtpTestStatus" style="display: none; padding: 10px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 16px;"></div>
+
+                <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-light); padding-top: 14px;">
+                    <button type="button" class="btn btn-secondary" id="testSmtpBtn">
+                        <span id="testSmtpBtnText">🔌 Test Connection</span>
+                    </button>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn btn-secondary" id="cancelSmtpModalBtn">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="saveSmtpBtn">💾 Save Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================================
+         MODAL 2: COLD EMAIL COMPOSER (1-CLICK DISPATCH)
+         ========================================================== -->
+    <div class="modal-overlay" id="emailComposerModalOverlay" style="display: none;">
+        <div class="modal-card" style="max-width: 620px;">
+            <div class="modal-header">
+                <div>
+                    <span class="drawer-tag">OUTREACH DISPATCHER</span>
+                    <h3 class="modal-title" id="composerModalTitle">Send Cold Email</h3>
+                </div>
+                <button class="close-btn" id="closeComposerModalBtn" aria-label="Close Composer">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Warning if SMTP not configured -->
+                <div id="composerSmtpWarning" style="display: none; background: #FEF3C7; border: 1px solid #FCD34D; color: #92400E; padding: 10px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 14px;">
+                    ⚠️ You haven't connected your email yet! <a href="javascript:void(0)" onclick="openEmailSettingsModal()" style="color: #B45309; font-weight: 600; text-decoration: underline;">Configure Email Settings</a> to send.
+                </div>
+
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; display: flex; justify-content: space-between;">
+                    <span>Sending From: <strong id="composerFromDisplay" style="color: #000;">Not configured</strong></span>
+                    <span style="color: #15803D; font-weight: 500;">✓ Inbox Deliverability Format</span>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="composerRecipientEmail">Recipient Email Address *</label>
+                    <input type="email" id="composerRecipientEmail" class="form-input" placeholder="e.g. owner@clinic.com">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="composerSubject">Subject Line *</label>
+                    <input type="text" id="composerSubject" class="form-input" placeholder="e.g. Quick question regarding Smile Dental's web presence">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                        <label class="form-label" for="composerBody">Message Body *</label>
+                        <span style="font-size: 11px; color: var(--text-muted);">Plain text (High Inbox Placement)</span>
+                    </div>
+                    <textarea id="composerBody" class="form-input" rows="8" style="font-family: var(--font-sans); line-height: 1.6; resize: vertical;" placeholder="Type or paste your personalized cold pitch here..."></textarea>
+                </div>
+
+                <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-light); padding-top: 14px;">
+                    <button type="button" class="btn btn-secondary" id="cancelComposerBtn">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="sendEmailSubmitBtn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        <span id="sendEmailSubmitText">Send Cold Email</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================================
+         MODAL 3: AI OUTREACH PITCH (EDITABLE MULTI-CHANNEL PITCH)
+         ========================================================== -->
+    <div class="modal-overlay" id="aiPitchModalOverlay" style="display: none;">
+        <div class="modal-card" style="max-width: 640px;">
+            <div class="modal-header">
+                <div>
+                    <span class="drawer-tag">AI COPYWRITER (3-STEP FRAMEWORK)</span>
+                    <h3 class="modal-title" id="pitchModalTitle">Personalized Pitch Engine</h3>
+                </div>
+                <button class="close-btn" id="closePitchModalBtn" aria-label="Close Pitch Modal" onclick="closePitchModal()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Channel Switcher Tabs -->
+                <div class="pitch-channel-tabs" style="display: flex; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid var(--border-light); padding-bottom: 10px;">
+                    <button type="button" class="channel-tab-btn active" data-channel="email" id="tabEmailPitch" onclick="switchPitchChannel('email')">
+                        ✉️ Cold Email Pitch
+                    </button>
+                    <button type="button" class="channel-tab-btn" data-channel="linkedin" id="tabLinkedinPitch" onclick="switchPitchChannel('linkedin')">
+                        💼 LinkedIn Note
+                    </button>
+                    <button type="button" class="channel-tab-btn" data-channel="whatsapp" id="tabWhatsappPitch" onclick="switchPitchChannel('whatsapp')">
+                        💬 WhatsApp Message
+                    </button>
+                </div>
+
+                <!-- Email Subject Line Field (visible on Email tab) -->
+                <div class="form-group" id="pitchSubjectGroup" style="margin-bottom: 12px;">
+                    <label class="form-label" for="pitchModalSubject">Subject Line (Editable)</label>
+                    <input type="text" id="pitchModalSubject" class="form-input" placeholder="e.g. quick question re: Dental Care">
+                </div>
+
+                <!-- Editable Message Body -->
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                        <label class="form-label" for="pitchModalBody">Pitch Copy (Editable)</label>
+                        <span id="pitchWordCount" style="font-size: 11px; color: var(--text-muted);">4 sentences • 3-Step Formula</span>
+                    </div>
+                    <textarea id="pitchModalBody" class="form-input" rows="8" style="font-family: var(--font-sans); line-height: 1.6; resize: vertical;"></textarea>
+                </div>
+
+                <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-light); padding-top: 14px;">
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn btn-secondary" id="modalRegenPitchBtn" onclick="regenerateCurrentModalPitch()">
+                            <span id="modalRegenPitchText">🔄 Regenerate</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="modalCopyPitchBtn" onclick="copyModalPitchText(this)">
+                            <span>📋 Copy</span>
+                        </button>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn btn-secondary" onclick="closePitchModal()">Close</button>
+                        <button type="button" class="btn btn-primary" id="transferToEmailBtn" onclick="transferPitchToEmailComposer()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                            <span>Send via Email →</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MOBILE BOTTOM NAVIGATION (THUMB-FRIENDLY PWA DOCK FOR <= 768PX) -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Mobile Navigation">
+        <button type="button" class="bnav-item active" data-screen="leads" id="bnavLeads" aria-label="Leads Pipeline">
+            <svg class="bnav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span class="bnav-text">Leads</span>
+            <span class="bnav-badge" id="bnavLeadCount">0</span>
+        </button>
+        <button type="button" class="bnav-item" data-screen="hunt" id="bnavHunt" aria-label="Hunt Launchpad">
+            <svg class="bnav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="22" y1="12" x2="18" y2="12"></line>
+                <line x1="6" y1="12" x2="2" y2="12"></line>
+                <line x1="12" y1="6" x2="12" y2="2"></line>
+                <line x1="12" y1="22" x2="12" y2="18"></line>
+            </svg>
+            <span class="bnav-text">Hunt</span>
+        </button>
+        <button type="button" class="bnav-item" data-screen="lists" id="bnavLists" aria-label="Campaign Lists">
+            <svg class="bnav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                <line x1="12" y1="11" x2="12" y2="17"></line>
+                <line x1="9" y1="14" x2="15" y2="14"></line>
+            </svg>
+            <span class="bnav-text">Lists</span>
+            <span class="bnav-badge" id="bnavListsCount">0</span>
+        </button>
+        <button type="button" class="bnav-item" data-screen="analytics" id="bnavAnalytics" aria-label="Analytics">
+            <svg class="bnav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <span class="bnav-text">Analytics</span>
+        </button>
+    </nav>
 
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>

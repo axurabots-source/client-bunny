@@ -40,3 +40,12 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local test scratch outputs and artifacts
+*.csv
+job*.json
+dentists_payload.json
+download_headers.txt
+jshttp-obscura-FULL-FILE.go
+google-maps-scraper/
+scrapemate/

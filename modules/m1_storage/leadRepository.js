@@ -156,6 +156,18 @@ class LeadRepository {
             [id]
         );
         lead.decision_makers = dmRes.rows;
+
+        // Attach outreach history
+        try {
+            const outRes = await pool.query(
+                `SELECT * FROM outreach_logs WHERE lead_id = $1 ORDER BY sent_at DESC, created_at DESC`,
+                [id]
+            );
+            lead.outreach_logs = outRes.rows;
+        } catch (e) {
+            lead.outreach_logs = [];
+        }
+
         return lead;
     }
 
@@ -171,35 +183,46 @@ class LeadRepository {
     }
 
     /**
-     * List leads with optional filtering
+     * List leads with optional filtering and aggregated decision makers
      */
-    static async listLeads({ limit = 100, offset = 0, status, city, list_name, country } = {}) {
+    static async listLeads({ limit = 100, offset = 0, status, city, list_name, country, pain_point } = {}) {
         let whereClauses = [];
         let values = [];
         let index = 1;
 
-        if (status) {
-            whereClauses.push(`status = $${index++}`);
+        if (status && status !== 'all') {
+            whereClauses.push(`l.status = $${index++}`);
             values.push(status);
         }
         if (city && city !== 'all') {
-            whereClauses.push(`city = $${index++}`);
+            whereClauses.push(`l.city = $${index++}`);
             values.push(city);
         }
         if (list_name && list_name !== 'all') {
-            whereClauses.push(`list_name = $${index++}`);
+            whereClauses.push(`l.list_name = $${index++}`);
             values.push(list_name);
         }
         if (country && country !== 'all') {
-            whereClauses.push(`country = $${index++}`);
+            whereClauses.push(`l.country = $${index++}`);
             values.push(country);
+        }
+        if (pain_point && pain_point !== 'all') {
+            whereClauses.push(`l.pain_points::text LIKE $${index++}`);
+            values.push(`%${pain_point}%`);
         }
 
         const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
         const query = `
-            SELECT * FROM leads
+            SELECT l.*,
+                   COALESCE(
+                       json_agg(dm.*) FILTER (WHERE dm.id IS NOT NULL), 
+                       '[]'::json
+                   ) AS decision_makers
+            FROM leads l
+            LEFT JOIN decision_makers dm ON dm.lead_id = l.id
             ${whereSql}
-            ORDER BY created_at DESC
+            GROUP BY l.id
+            ORDER BY l.created_at DESC
             LIMIT $${index++} OFFSET $${index++};
         `;
         values.push(limit, offset);
@@ -212,17 +235,53 @@ class LeadRepository {
      * Pipeline metrics summary
      */
     static async getStats() {
-        const res = await pool.query(`
+        const leadStats = await pool.query(`
             SELECT 
-                COUNT(*) AS total_leads,
-                COUNT(*) FILTER (WHERE status = 'new') AS new_leads,
-                COUNT(*) FILTER (WHERE status = 'enriched') AS enriched_leads,
-                COUNT(*) FILTER (WHERE pain_points::text LIKE '%no_website%') AS no_website_count,
-                COUNT(*) FILTER (WHERE pain_points::text LIKE '%low_rating%') AS low_rating_count,
-                COUNT(*) FILTER (WHERE pain_points::text LIKE '%high_ticket_spender%') AS high_ticket_count
+                COUNT(*)::int AS total_leads,
+                COUNT(*) FILTER (WHERE status = 'new')::int AS new_leads,
+                COUNT(*) FILTER (WHERE status = 'enriched')::int AS enriched_leads,
+                COUNT(*) FILTER (WHERE status = 'emailed')::int AS emailed_leads,
+                COUNT(*) FILTER (WHERE status = 'replied')::int AS replied_leads,
+                COUNT(*) FILTER (WHERE pain_points::text LIKE '%no_website%')::int AS no_website_count,
+                COUNT(*) FILTER (WHERE pain_points::text LIKE '%low_rating%')::int AS low_rating_count,
+                COUNT(*) FILTER (WHERE pain_points::text LIKE '%high_ticket_spender%')::int AS high_ticket_count
             FROM leads;
         `);
-        return res.rows[0];
+
+        // Daily email limits and outreach metrics
+        let sentToday = 0;
+        let totalSent = 0;
+        let repliesReceived = 0;
+        try {
+            const outreachRes = await pool.query(`
+                SELECT 
+                    COUNT(*) FILTER (WHERE status = 'sent' AND DATE(sent_at) = CURRENT_DATE)::int AS sent_today,
+                    COUNT(*) FILTER (WHERE status = 'sent')::int AS total_sent,
+                    COUNT(*) FILTER (WHERE status = 'replied')::int AS replies_received
+                FROM outreach_logs;
+            `);
+            if (outreachRes.rows.length > 0) {
+                sentToday = outreachRes.rows[0].sent_today || 0;
+                totalSent = outreachRes.rows[0].total_sent || 0;
+                repliesReceived = outreachRes.rows[0].replies_received || 0;
+            }
+        } catch (e) {
+            // Ignore if table query fails
+        }
+
+        const stats = leadStats.rows[0] || {};
+        const total = stats.total_leads || 0;
+        const enriched = stats.enriched_leads || 0;
+        const enrichedPercent = total > 0 ? Math.round((enriched / total) * 100) : 0;
+
+        return {
+            ...stats,
+            emails_sent_today: sentToday,
+            daily_limit: 30,
+            emails_sent_total: totalSent,
+            replies_received: repliesReceived,
+            enriched_percent: enrichedPercent
+        };
     }
 
     static async close() {

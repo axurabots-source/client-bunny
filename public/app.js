@@ -75,8 +75,8 @@ const pathArea = document.getElementById('pathArea');
 const huntNiche = document.getElementById('huntNiche');
 const huntLimit = document.getElementById('huntLimit');
 const jobsList = document.getElementById('jobsList');
-const startHuntSubmitBtn = document.getElementById('startHuntSubmitBtn');
-const startHuntBtnText = document.getElementById('startHuntBtnText');
+const startHuntSubmitBtn = document.getElementById('startHuntSubmitBtn') || document.getElementById('startHuntBtn');
+const startHuntBtnText = document.getElementById('startHuntBtnText') || (startHuntSubmitBtn ? startHuntSubmitBtn.querySelector('span') : null);
 
 // Live Hunt Streaming Banner Elements
 const liveHuntBanner = document.getElementById('liveHuntBanner');
@@ -102,7 +102,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     initNavigation();
     initSidebarToggle();
     initNicheChips();
+    initEmailSettings();
     bindEvents();
+    initPWA();
 
     // Parallel fetch initialization
     await Promise.all([
@@ -115,17 +117,103 @@ document.addEventListener('DOMContentLoaded', async () => {
     ]);
 });
 
-function initSidebarToggle() {
-    if (!toggleSidebarBtn) return;
-    toggleSidebarBtn.addEventListener('click', () => {
-        document.body.classList.toggle('sidebar-collapsed');
-        const arrow = document.getElementById('sidebarToggleArrow');
-        if (document.body.classList.contains('sidebar-collapsed')) {
-            if (arrow) arrow.setAttribute('d', 'M13 9l3 3-3 3');
-        } else {
-            if (arrow) arrow.setAttribute('d', 'M15 9l-3 3 3 3');
+// ==========================================================
+// 1.1. PROGRESSIVE WEB APP (PWA) INITIALIZATION
+// ==========================================================
+let deferredPwaPrompt = null;
+
+function initPWA() {
+    const installBtn = document.getElementById('pwaInstallBtn');
+    const offlineBadge = document.getElementById('pwaOfflineBadge');
+
+    // 1. Register Service Worker
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then((registration) => {
+                    console.log('[PWA] Service Worker registered successfully! Scope:', registration.scope);
+                })
+                .catch((err) => {
+                    console.warn('[PWA] Service Worker registration failed:', err);
+                });
+        });
+    }
+
+    // 2. Capture beforeinstallprompt for in-app install button
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPwaPrompt = e;
+
+        if (installBtn) {
+            installBtn.style.display = 'inline-flex';
+            installBtn.addEventListener('click', async () => {
+                if (!deferredPwaPrompt) return;
+                deferredPwaPrompt.prompt();
+                const choiceResult = await deferredPwaPrompt.userChoice;
+                console.log('[PWA] Install prompt outcome:', choiceResult.outcome);
+                deferredPwaPrompt = null;
+                installBtn.style.display = 'none';
+            });
         }
     });
+
+    // 3. Handle appinstalled event
+    window.addEventListener('appinstalled', () => {
+        console.log('[PWA] Client Bunny installed as desktop/mobile standalone app.');
+        showToast('🎉 Client Bunny installed successfully!');
+        if (installBtn) installBtn.style.display = 'none';
+        deferredPwaPrompt = null;
+    });
+
+    // 4. Online / Offline network listeners
+    function updateNetworkStatus(e) {
+        const isOnline = (e && e.type === 'offline') ? false : ((e && e.type === 'online') ? true : navigator.onLine);
+        if (offlineBadge) {
+            offlineBadge.style.display = isOnline ? 'none' : 'inline-flex';
+        }
+        if (!isOnline) {
+            showToast('⚡ Offline Mode: Working with cached records.');
+        } else {
+            console.log('[PWA] Device is online.');
+        }
+    }
+
+    window.addEventListener('online', (e) => updateNetworkStatus(e));
+    window.addEventListener('offline', (e) => updateNetworkStatus(e));
+    updateNetworkStatus();
+
+    // 5. Handle PWA Shortcut URL Params (e.g. /?screen=hunt)
+    const urlParams = new URLSearchParams(window.location.search);
+    const screenTarget = urlParams.get('screen');
+    if (screenTarget && ['leads', 'hunt', 'lists', 'analytics'].includes(screenTarget)) {
+        setTimeout(() => switchScreen(screenTarget), 100);
+    }
+}
+
+function initSidebarToggle() {
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
+    if (toggleSidebarBtn) {
+        toggleSidebarBtn.addEventListener('click', () => {
+            if (window.innerWidth <= 900) {
+                document.body.classList.toggle('mobile-nav-open');
+            } else {
+                document.body.classList.toggle('sidebar-collapsed');
+                const arrow = document.getElementById('sidebarToggleArrow');
+                if (document.body.classList.contains('sidebar-collapsed')) {
+                    if (arrow) arrow.setAttribute('d', 'M13 9l3 3-3 3');
+                } else {
+                    if (arrow) arrow.setAttribute('d', 'M15 9l-3 3 3 3');
+                }
+            }
+        });
+    }
+
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener('click', () => {
+            document.body.classList.remove('mobile-nav-open');
+        });
+    }
 }
 
 function initNavigation() {
@@ -138,7 +226,26 @@ function initNavigation() {
 
     navItems.forEach(item => {
         if (!item.el) return;
-        item.el.addEventListener('click', () => switchScreen(item.screen));
+        item.el.addEventListener('click', () => {
+            document.body.classList.remove('mobile-nav-open');
+            switchScreen(item.screen);
+        });
+    });
+
+    // Mobile Bottom Navigation Dock Items
+    const bnavItems = [
+        { el: document.getElementById('bnavLeads'), screen: 'leads' },
+        { el: document.getElementById('bnavHunt'), screen: 'hunt' },
+        { el: document.getElementById('bnavLists'), screen: 'lists' },
+        { el: document.getElementById('bnavAnalytics'), screen: 'analytics' }
+    ];
+
+    bnavItems.forEach(item => {
+        if (!item.el) return;
+        item.el.addEventListener('click', () => {
+            document.body.classList.remove('mobile-nav-open');
+            switchScreen(item.screen);
+        });
     });
 
     if (headerHuntBtn) {
@@ -157,10 +264,15 @@ function initNavigation() {
 function switchScreen(screenName) {
     currentScreen = screenName;
 
-    // Update active nav button
+    // Update active nav button (Desktop Sidebar)
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
     const targetNav = document.querySelector(`.nav-item[data-screen="${screenName}"]`);
     if (targetNav) targetNav.classList.add('active');
+
+    // Update active nav button (Mobile Bottom Bar)
+    document.querySelectorAll('.bnav-item').forEach(btn => btn.classList.remove('active'));
+    const targetBnav = document.querySelector(`.bnav-item[data-screen="${screenName}"]`);
+    if (targetBnav) targetBnav.classList.add('active');
 
     // Hide all screens, show target
     document.querySelectorAll('.screen-view').forEach(s => s.classList.remove('active'));
@@ -185,9 +297,22 @@ function switchScreen(screenName) {
 }
 
 function initNicheChips() {
-    document.querySelectorAll('#nicheChips .chip').forEach(btn => {
+
+    // Limit pill buttons
+    document.querySelectorAll('.limit-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            huntNiche.value = btn.dataset.val;
+            document.querySelectorAll('.limit-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (huntLimit) huntLimit.value = btn.getAttribute('data-limit');
+        });
+    });
+
+    // Niche chips
+    document.querySelectorAll('.niche-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('.niche-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            if (huntNiche) huntNiche.value = chip.getAttribute('data-niche');
         });
     });
 }
@@ -229,7 +354,7 @@ function populateCountryDropdown() {
 
 function handleCountryChange() {
     const country = huntCountry.value;
-    pathCountry.textContent = country || 'Country';
+    if (pathCountry) pathCountry.textContent = country || 'Country';
 
     const regionsObj = locationsHierarchy[country] || null;
     huntRegion.innerHTML = '';
@@ -255,7 +380,7 @@ function handleCountryChange() {
 function handleRegionChange() {
     const country = huntCountry.value;
     const region = huntRegion.value;
-    pathRegion.textContent = region || 'Region';
+    if (pathRegion) pathRegion.textContent = region || 'Region';
 
     const regionsObj = locationsHierarchy[country] || {};
     const citiesObj = regionsObj[region] || null;
@@ -288,7 +413,7 @@ function handleCityChange() {
     const country = huntCountry.value;
     const region = huntRegion.value;
     const city = huntCity.value;
-    pathCity.textContent = city || 'City';
+    if (pathCity) pathCity.textContent = city || 'City';
 
     huntArea.innerHTML = '';
 
@@ -326,7 +451,7 @@ function handleAreaChange() {
         pathArea.textContent = customAreaInput.value || 'Custom Area';
     } else {
         customAreaBox.style.display = 'none';
-        pathArea.textContent = area || 'Area';
+        if (pathArea) pathArea.textContent = area || 'Area';
     }
 }
 
@@ -346,6 +471,8 @@ async function fetchLists() {
         if (data.success && data.lists) {
             allLists = data.lists;
             sidebarListsCount.textContent = allLists.length;
+            const bnavListsCount = document.getElementById('bnavListsCount');
+            if (bnavListsCount) bnavListsCount.textContent = allLists.length;
             populateListSelects();
             renderLists();
         }
@@ -409,11 +536,14 @@ function renderLists() {
                     <strong>${l.lead_count || 0}</strong>
                 </div>
             </div>
-            <div style="display: flex; gap: 8px;">
-                <button class="btn btn-secondary" style="flex: 1; justify-content: center;" onclick="viewListLeads('${escapeHtml(l.name)}')">
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <button class="btn btn-primary" style="flex: 1; justify-content: center; font-size: 12px; padding: 6px 10px;" onclick="viewListLeads('${escapeHtml(l.name)}')">
                     <span>View Leads</span>
                 </button>
-                <button class="btn btn-secondary btn-danger-hover" title="Delete list & remove its leads from DB" onclick="deleteList(${l.id}, '${escapeHtml(l.name)}')">
+                <button class="btn btn-secondary" style="flex: 1; justify-content: center; font-size: 12px; padding: 6px 10px;" title="Add more leads to this list" onclick="reHuntList('${escapeHtml(l.name)}')">
+                    <span>⚡ Re-Hunt</span>
+                </button>
+                <button class="btn btn-secondary btn-danger-hover" style="font-size: 12px; padding: 6px 10px;" title="Delete list & remove its leads from DB" onclick="deleteList(${l.id}, '${escapeHtml(l.name)}')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -474,11 +604,31 @@ async function fetchStats() {
         const data = await res.json();
         if (data.success && data.stats) {
             const total = data.stats.total_leads || 0;
-            statTotal.textContent = total;
-            sidebarLeadCount.textContent = total;
-            statNoWebsite.textContent = data.stats.no_website_count || 0;
-            statHighTicket.textContent = data.stats.high_ticket_count || 0;
-            statRepRisk.textContent = data.stats.low_rating_count || 0;
+            if (statTotal) statTotal.textContent = total;
+            if (sidebarLeadCount) sidebarLeadCount.textContent = total;
+            const bnavLeadCount = document.getElementById('bnavLeadCount');
+            if (bnavLeadCount) bnavLeadCount.textContent = total;
+
+            const sentToday = data.stats.emails_sent_today !== undefined ? data.stats.emails_sent_today : 0;
+            const dailyLimit = data.stats.daily_limit || 30;
+            const statEmailsTodayEl = document.getElementById('statEmailsSentToday');
+            if (statEmailsTodayEl) {
+                statEmailsTodayEl.textContent = `${sentToday} / ${dailyLimit} limit`;
+            }
+
+            const statRepliesEl = document.getElementById('statRepliesReceived');
+            if (statRepliesEl) {
+                statRepliesEl.textContent = data.stats.replies_received || 0;
+            }
+
+            const statEnrichedEl = document.getElementById('statEnrichedPercent');
+            if (statEnrichedEl) {
+                statEnrichedEl.textContent = `${data.stats.enriched_percent || 0}%`;
+            }
+
+            if (statNoWebsite) statNoWebsite.textContent = data.stats.no_website_count || 0;
+            if (statHighTicket) statHighTicket.textContent = data.stats.high_ticket_count || 0;
+            if (statRepRisk) statRepRisk.textContent = data.stats.low_rating_count || 0;
         }
     } catch (err) {
         console.error("Failed to load stats:", err);
@@ -608,7 +758,7 @@ function bindEvents() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         name: targetListName,
-                        description: newListDescInput.value.trim(),
+                        description: (newListDescInput && newListDescInput.value) ? newListDescInput.value.trim() : '',
                         country: huntCountry.value,
                         region: huntRegion.value,
                         city: huntCity.value,
@@ -677,17 +827,24 @@ function bindEvents() {
         const eventSource = new EventSource(sseUrl);
 
         function restoreHuntBtn() {
-            startHuntSubmitBtn.disabled = false;
-            startHuntBtnText.textContent = 'Start Lead Hunt';
-            startHuntSubmitBtn.querySelector('svg').outerHTML = `
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="22" y1="12" x2="18" y2="12"></line>
-                    <line x1="6" y1="12" x2="2" y2="12"></line>
-                    <line x1="12" y1="6" x2="12" y2="2"></line>
-                    <line x1="12" y1="22" x2="12" y2="18"></line>
-                </svg>
-            `;
+            if (startHuntSubmitBtn) {
+                startHuntSubmitBtn.disabled = false;
+                const svg = startHuntSubmitBtn.querySelector('svg');
+                if (svg) {
+                    svg.outerHTML = `
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="22" y1="12" x2="18" y2="12"></line>
+                            <line x1="6" y1="12" x2="2" y2="12"></line>
+                            <line x1="12" y1="6" x2="12" y2="2"></line>
+                            <line x1="12" y1="22" x2="12" y2="18"></line>
+                        </svg>
+                    `;
+                }
+            }
+            if (startHuntBtnText) {
+                startHuntBtnText.textContent = 'Start Live Hunt';
+            }
         }
 
         eventSource.onmessage = (event) => {
@@ -716,8 +873,17 @@ function bindEvents() {
                 } else if (data.type === 'done') {
                     eventSource.close();
                     restoreHuntBtn();
-                    if (liveHuntStatusText) liveHuntStatusText.textContent = `Completed! ${data.total_found} leads discovered & fully enriched.`;
-                    showToast(`Hunt finished! Found ${data.total_found} leads with unified contact profiles.`);
+                    const newCount = data.newLeadsCount !== undefined ? data.newLeadsCount : (data.total_found || 0);
+                    const skipped = data.skippedDuplicates || 0;
+                    
+                    if (newCount === 0) {
+                        if (liveHuntStatusText) liveHuntStatusText.textContent = data.message || 'Area fully covered. All businesses already saved in this list.';
+                        showToast(data.message || 'Area fully covered. No duplicate leads added.');
+                    } else {
+                        if (liveHuntStatusText) liveHuntStatusText.textContent = `Completed! ${newCount} new leads added (${skipped} duplicates skipped).`;
+                        showToast(`Hunt finished! Added ${newCount} new verified leads (${skipped} skipped).`);
+                    }
+                    if (liveHuntCounter) liveHuntCounter.textContent = `${newCount} New Added`;
                     fetchStats();
                     fetchCities();
                     fetchLists();
@@ -777,6 +943,22 @@ function applyFilters(incomingLeadId = null) {
         return matchesQuery && matchesPill;
     });
 
+    
+    // Update Active List Bar
+    const activeListNameDisplay = document.getElementById('activeListNameDisplay');
+    const activeListCountDisplay = document.getElementById('activeListCountDisplay');
+    const reHuntListBtn = document.getElementById('reHuntListBtn');
+    
+    if (activeListNameDisplay) {
+        activeListNameDisplay.textContent = currentListFilter === 'all' ? 'All Campaign Lists' : currentListFilter;
+    }
+    if (activeListCountDisplay) {
+        activeListCountDisplay.textContent = filtered.length + ' leads isolated';
+    }
+    if (reHuntListBtn) {
+        reHuntListBtn.style.display = currentListFilter === 'all' ? 'none' : 'inline-flex';
+    }
+
     renderTable(filtered, incomingLeadId);
     updateFilterCounts();
 }
@@ -792,6 +974,8 @@ function updateStatsLocally() {
     updateFilterCounts();
     if (statTotal) statTotal.textContent = allLeads.length;
     if (sidebarLeadCount) sidebarLeadCount.textContent = allLeads.length;
+    const bnavLeadCount = document.getElementById('bnavLeadCount');
+    if (bnavLeadCount) bnavLeadCount.textContent = allLeads.length;
     const noWeb = allLeads.filter(l => (l.pain_points || []).includes('no_website')).length;
     const high = allLeads.filter(l => (l.pain_points || []).includes('high_ticket_spender')).length;
     const rep = allLeads.filter(l => (l.pain_points || []).includes('reputation_risk')).length;
@@ -832,7 +1016,7 @@ function renderTable(leads, incomingLeadId = null) {
     showingCount.textContent = `Showing ${leads.length} of ${allLeads.length} leads`;
 
     if (leads.length === 0) {
-        leadsTbody.innerHTML = `<tr><td colspan="5" class="table-loading">No leads found matching current criteria.</td></tr>`;
+        leadsTbody.innerHTML = `<tr><td colspan="6" class="table-loading">No leads found matching current criteria.</td></tr>`;
         return;
     }
 
@@ -870,7 +1054,9 @@ function renderTable(leads, incomingLeadId = null) {
                         <span class="lead-category">
                             ${escapeHtml(lead.category || 'Local Business')} • <span style="color: #71717A;">${escapeHtml(lead.list_name || 'General')}</span>
                             ${lead.whatsapp_number ? ` • <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" onclick="event.stopPropagation();">WA: ${escapeHtml(lead.whatsapp_number)}</a>` : ''}
-                            ${firstDm ? ` • <span style="color: #18181B; font-weight: 500;">DM: ${escapeHtml(firstDm.full_name)}</span>` : ''}
+                        </span>
+                        <span style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                            ${escapeHtml(district + city)} ${lead.phone ? `• ${escapeHtml(lead.phone)}` : ''}
                         </span>
                     </div>
                 </td>
@@ -881,24 +1067,42 @@ function renderTable(leads, incomingLeadId = null) {
                     </div>
                 </td>
                 <td>
-                    <div class="reputation-box">
-                        <span style="font-weight: 500;">${escapeHtml(district + city)}</span>
-                        <span style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(lead.phone || 'No phone recorded')}</span>
-                    </div>
-                </td>
-                <td>
                     <div class="pain-tags">
                         ${painBadges || '<span style="color: var(--text-muted); font-size: 12px;">No urgent risks</span>'}
                     </div>
                 </td>
+                <td>
+                    ${firstDm ? `
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <span style="font-weight: 600; color: #18181B; font-size: 13px;">${escapeHtml(firstDm.full_name)}</span>
+                            <span style="font-size: 11px; color: #71717A;">${escapeHtml(firstDm.title_role || 'Owner / Director')}</span>
+                            ${firstDm.email ? `<span style="font-size: 11px; color: #15803D; font-weight: 500;">✉ ${escapeHtml(firstDm.email)}</span>` : '<span style="font-size: 11px; color: #A1A1AA;">Email unlisted</span>'}
+                        </div>
+                    ` : `
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <span style="font-size: 12px; color: #A1A1AA;">No DM discovered</span>
+                            <a href="javascript:void(0)" onclick="event.stopPropagation(); triggerRowDeepEnrich(${lead.id}, this);" style="font-size: 11px; color: #2563EB; text-decoration: underline;">Run Deep Enrich →</a>
+                        </div>
+                    `}
+                </td>
+                <td>
+                    <span class="badge-status badge-status-${lead.status || 'new'}">${lead.status || 'new'}</span>
+                </td>
                 <td style="text-align: right;" onclick="event.stopPropagation();">
-                    <button class="btn btn-secondary" onclick="openLeadDetail(${lead.id})">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                            <circle cx="12" cy="12" r="3"></circle>
-                        </svg>
-                        <span>Inspect</span>
-                    </button>
+                    <div class="table-action-cluster">
+                        <button class="btn-row-action" title="Deep Enrich (Crawl website + Search Dork)" onclick="triggerRowDeepEnrich(${lead.id}, this)">
+                            <span>⚡ Enrich</span>
+                        </button>
+                        <button class="btn-row-action" title="Generate or Review AI Pitch (Editable)" onclick="openPitchModal(${lead.id})">
+                            <span>✨ Pitch</span>
+                        </button>
+                        <button class="btn-row-action primary" title="Send or Queue Cold Email" onclick="openEmailComposerModal(${lead.id})">
+                            <span>✉️ Email</span>
+                        </button>
+                        <button class="btn-row-action" title="View Full Dossier" onclick="openLeadDetail(${lead.id})">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
@@ -963,32 +1167,63 @@ function renderDrawerContent(lead) {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                         AI PERSONALIZED B2B PITCH (GROQ / GEMINI)
                     </span>
-                    <button class="pitch-copy-btn" id="copyPitchBtn" onclick="copyPitchText(this)">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"></path></svg>
-                        <span>Copy Pitch</span>
-                    </button>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="pitch-copy-btn" id="copyPitchBtn" onclick="copyPitchText(this)">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"></path></svg>
+                            <span>Copy Pitch</span>
+                        </button>
+                        <button class="pitch-copy-btn" id="regenPitchBtn_${lead.id}" onclick="triggerGeneratePitch(${lead.id})" title="Re-generate tailored pitch">
+                            <span>🔄 Re-generate</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="pitch-body-text" id="pitchBodyText">${escapeHtml(lead.ai_pitch)}</div>
+                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                    <button class="btn btn-primary btn-sm" onclick="openEmailComposerModal(${lead.id})" style="font-size: 12px; padding: 5px 12px;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                        <span>Dispatch This Pitch Via Email</span>
+                    </button>
+                </div>
             </div>
         </div>
-    ` : '';
+    ` : `
+        <div class="detail-section">
+            <div class="pitch-box" style="background: #FAFAFA; border: 1px dashed var(--border-light); text-align: center; padding: 18px 14px;">
+                <div style="font-size: 13px; font-weight: 600; color: #18181B; margin-bottom: 4px;">⚡ Token Saver Mode (AI Pitch On-Demand)</div>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; max-width: 440px; margin-left: auto; margin-right: auto;">
+                    Pitches are not generated automatically to conserve your Groq/Gemini tokens. Click below when you are ready to craft a tailored offer for this business.
+                </p>
+                <button class="btn btn-primary" id="generatePitchBtn_${lead.id}" onclick="triggerGeneratePitch(${lead.id})" style="font-size: 12px; padding: 6px 14px; margin: 0 auto;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <span>✨ Generate AI Cold Pitch</span>
+                </button>
+            </div>
+        </div>
+    `;
 
     drawerBody.innerHTML = `
         <div class="detail-section">
-            <span class="detail-heading">ACTIONS & ENRICHMENT TOOLS</span>
+            <span class="detail-heading">ACTIONS & OUTREACH TOOLS</span>
             <div style="display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;">
-                <button class="btn btn-primary" id="fullEnrichBtn" onclick="triggerFullEnrich(${lead.id})">
+                <button class="btn btn-primary" onclick="openEmailComposerModal(${lead.id})" style="background: #000; color: #fff;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    <span>✉️ Send Cold Email</span>
+                </button>
+                <button class="btn btn-secondary" id="fullEnrichBtn" onclick="triggerFullEnrich(${lead.id})">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                     </svg>
-                    <span>Full Waterfall Enrich (AI + Dork + Crawl)</span>
+                    <span>Full Waterfall Enrich (Owner Finder)</span>
                 </button>
-                ${lead.whatsapp_number ? `
-                    <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="btn btn-secondary" style="border-color: #22C55E; color: #15803D; font-weight: 600; text-decoration: none;">
+                ${(lead.whatsapp_number || lead.phone) ? `
+                    <a href="https://wa.me/${escapeHtml((lead.whatsapp_number || lead.phone).replace(/\D/g, ''))}" target="_blank" class="btn btn-secondary" style="border-color: #22C55E; color: #15803D; font-weight: 600; text-decoration: none;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
                         </svg>
-                        <span>WhatsApp (${escapeHtml(lead.whatsapp_number)})</span>
+                        <span>${lead.whatsapp_number ? 'WhatsApp (' + escapeHtml(lead.whatsapp_number) + ')' : 'Chat on WhatsApp (' + escapeHtml(lead.phone) + ')'}</span>
                     </a>
                 ` : ''}
                 <a href="${mapsUrl}" target="_blank" class="btn btn-secondary" style="text-decoration: none;">
@@ -1251,3 +1486,581 @@ function renderAnalytics() {
         </div>
     `;
 }
+
+
+window.reHuntList = function(listName) {
+    switchScreen('hunt');
+    if (huntListSelect) huntListSelect.value = listName;
+    const found = allLists.find(x => x.name === listName);
+    if (found) {
+        if (found.target_niche && huntNiche) huntNiche.value = found.target_niche;
+        if (found.target_country && huntCountry) {
+            huntCountry.value = found.target_country;
+            handleCountryChange();
+            setTimeout(() => {
+                if (found.target_city && huntCity) {
+                    huntCity.value = found.target_city;
+                    handleCityChange();
+                }
+            }, 300);
+        }
+    }
+    showToast('Ready to re-hunt into list: "' + listName + '". Duplicates will be skipped!');
+};
+
+window.reHuntCurrentList = function() {
+    if (currentListFilter && currentListFilter !== 'all') {
+        const found = allLists.find(l => l.name === currentListFilter);
+        window.reHuntList(
+            currentListFilter, 
+            found ? found.target_country : '', 
+            found ? found.target_city : '', 
+            found ? found.target_niche : ''
+        );
+    } else {
+        switchScreen('hunt');
+    }
+};
+
+// ==========================================================
+// MODULE 5: OUTREACH & FRONTEND EMAIL/SMTP CONFIGURATION
+// ==========================================================
+
+const SMTP_STORAGE_KEY = 'client_bunny_smtp_config';
+
+function getSmtpConfig() {
+    try {
+        const raw = localStorage.getItem(SMTP_STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {
+        senderName: '',
+        user: '',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        pass: ''
+    };
+}
+
+function saveSmtpConfig(config) {
+    localStorage.setItem(SMTP_STORAGE_KEY, JSON.stringify(config));
+    updateEmailStatusBadge();
+}
+
+function updateEmailStatusBadge() {
+    const config = getSmtpConfig();
+    const dot = document.getElementById('emailStatusDot');
+    const badgeText = document.getElementById('emailStatusBadgeText');
+    if (!dot || !badgeText) return;
+
+    if (config.user && config.pass) {
+        dot.className = 'status-dot connected';
+        badgeText.textContent = config.user;
+    } else {
+        dot.className = 'status-dot disconnected';
+        badgeText.textContent = 'Email Settings';
+    }
+}
+
+function initEmailSettings() {
+    updateEmailStatusBadge();
+
+    // Header Button
+    const emailSettingsBtn = document.getElementById('emailSettingsBtn');
+    if (emailSettingsBtn) {
+        emailSettingsBtn.addEventListener('click', openEmailSettingsModal);
+    }
+
+    // Modal Close buttons
+    const closeSmtpModalBtn = document.getElementById('closeSmtpModalBtn');
+    const cancelSmtpModalBtn = document.getElementById('cancelSmtpModalBtn');
+    if (closeSmtpModalBtn) closeSmtpModalBtn.addEventListener('click', closeEmailSettingsModal);
+    if (cancelSmtpModalBtn) cancelSmtpModalBtn.addEventListener('click', closeEmailSettingsModal);
+
+    // Save Settings
+    const saveSmtpBtn = document.getElementById('saveSmtpBtn');
+    if (saveSmtpBtn) {
+        saveSmtpBtn.addEventListener('click', () => {
+            const senderName = document.getElementById('smtpSenderName').value.trim();
+            const user = document.getElementById('smtpSenderEmail').value.trim();
+            const host = document.getElementById('smtpHost').value.trim() || 'smtp.gmail.com';
+            const port = parseInt(document.getElementById('smtpPort').value.trim(), 10) || 465;
+            const secure = document.getElementById('smtpSecure').value === 'true';
+            const pass = document.getElementById('smtpPass').value.trim();
+
+            if (!user) {
+                showToast('Please enter your sender email address.');
+                return;
+            }
+            if (!pass) {
+                showToast('Please enter your SMTP / App Password.');
+                return;
+            }
+
+            saveSmtpConfig({ senderName, user, host, port, secure, pass });
+            showToast('✅ Email settings saved securely in your browser!');
+            closeEmailSettingsModal();
+        });
+    }
+
+    // Test Connection
+    const testSmtpBtn = document.getElementById('testSmtpBtn');
+    if (testSmtpBtn) {
+        testSmtpBtn.addEventListener('click', async () => {
+            const senderName = document.getElementById('smtpSenderName').value.trim();
+            const user = document.getElementById('smtpSenderEmail').value.trim();
+            const host = document.getElementById('smtpHost').value.trim() || 'smtp.gmail.com';
+            const port = parseInt(document.getElementById('smtpPort').value.trim(), 10) || 465;
+            const secure = document.getElementById('smtpSecure').value === 'true';
+            const pass = document.getElementById('smtpPass').value.trim();
+
+            if (!user || !pass) {
+                showToast('Enter both email and app password to test.');
+                return;
+            }
+
+            const statusBanner = document.getElementById('smtpTestStatus');
+            const btnText = document.getElementById('testSmtpBtnText');
+            btnText.textContent = 'Testing connection...';
+            testSmtpBtn.disabled = true;
+            statusBanner.style.display = 'block';
+            statusBanner.style.background = '#F4F4F5';
+            statusBanner.style.color = '#18181B';
+            statusBanner.style.border = '1px solid #E4E4E7';
+            statusBanner.textContent = 'Connecting to ' + host + ':' + port + '...';
+
+            try {
+                const res = await fetch('/api/email/test-connection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        smtpConfig: { senderName, user, host, port, secure, pass }
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    statusBanner.style.background = '#ECFDF5';
+                    statusBanner.style.color = '#065F46';
+                    statusBanner.style.border = '1px solid #A7F3D0';
+                    statusBanner.textContent = '✅ ' + data.message;
+                    saveSmtpConfig({ senderName, user, host, port, secure, pass });
+                } else {
+                    statusBanner.style.background = '#FEF2F2';
+                    statusBanner.style.color = '#991B1B';
+                    statusBanner.style.border = '1px solid #FECACA';
+                    statusBanner.textContent = '❌ Connection failed: ' + (data.error || 'Check host, port and app password.');
+                }
+            } catch (err) {
+                statusBanner.style.background = '#FEF2F2';
+                statusBanner.style.color = '#991B1B';
+                statusBanner.style.border = '1px solid #FECACA';
+                statusBanner.textContent = '❌ Network error testing SMTP: ' + err.message;
+            } finally {
+                btnText.textContent = '🔌 Test Connection';
+                testSmtpBtn.disabled = false;
+            }
+        });
+    }
+
+    // Toggle Password Visibility
+    const togglePassBtn = document.getElementById('toggleSmtpPassBtn');
+    if (togglePassBtn) {
+        togglePassBtn.addEventListener('click', () => {
+            const passInput = document.getElementById('smtpPass');
+            if (passInput.type === 'password') {
+                passInput.type = 'text';
+                togglePassBtn.textContent = 'Hide';
+            } else {
+                passInput.type = 'password';
+                togglePassBtn.textContent = 'Show';
+            }
+        });
+    }
+
+    // Presets
+    const presetGmailBtn = document.getElementById('presetGmailBtn');
+    if (presetGmailBtn) {
+        presetGmailBtn.addEventListener('click', () => {
+            document.getElementById('smtpHost').value = 'smtp.gmail.com';
+            document.getElementById('smtpPort').value = '465';
+            document.getElementById('smtpSecure').value = 'true';
+            showToast('Applied Gmail preset (Port 465 SSL)');
+        });
+    }
+
+    const presetZohoBtn = document.getElementById('presetZohoBtn');
+    if (presetZohoBtn) {
+        presetZohoBtn.addEventListener('click', () => {
+            document.getElementById('smtpHost').value = 'smtp.zoho.com';
+            document.getElementById('smtpPort').value = '465';
+            document.getElementById('smtpSecure').value = 'true';
+            showToast('Applied Zoho preset (Port 465 SSL)');
+        });
+    }
+
+    // Composer Close
+    const closeComposerModalBtn = document.getElementById('closeComposerModalBtn');
+    const cancelComposerBtn = document.getElementById('cancelComposerBtn');
+    if (closeComposerModalBtn) closeComposerModalBtn.addEventListener('click', closeEmailComposerModal);
+    if (cancelComposerBtn) cancelComposerBtn.addEventListener('click', closeEmailComposerModal);
+
+    // Composer Submit Send
+    const sendEmailSubmitBtn = document.getElementById('sendEmailSubmitBtn');
+    if (sendEmailSubmitBtn) {
+        sendEmailSubmitBtn.addEventListener('click', sendColdEmailSubmit);
+    }
+}
+
+window.openEmailSettingsModal = function() {
+    const config = getSmtpConfig();
+    document.getElementById('smtpSenderName').value = config.senderName || '';
+    document.getElementById('smtpSenderEmail').value = config.user || '';
+    document.getElementById('smtpHost').value = config.host || 'smtp.gmail.com';
+    document.getElementById('smtpPort').value = config.port || 465;
+    document.getElementById('smtpSecure').value = config.secure ? 'true' : 'false';
+    document.getElementById('smtpPass').value = config.pass || '';
+
+    const statusBanner = document.getElementById('smtpTestStatus');
+    if (statusBanner) statusBanner.style.display = 'none';
+
+    document.getElementById('emailSettingsModalOverlay').style.display = 'flex';
+};
+
+window.closeEmailSettingsModal = function() {
+    document.getElementById('emailSettingsModalOverlay').style.display = 'none';
+};
+
+// Current Active Lead for Composer
+let activeComposerLead = null;
+
+window.openEmailComposerModal = function(leadId, prefilledSubject = null, prefilledBody = null) {
+    const lead = allLeads.find(l => l.id == leadId);
+    if (!lead) {
+        showToast('Lead details not found.');
+        return;
+    }
+    activeComposerLead = lead;
+
+    const config = getSmtpConfig();
+    const warning = document.getElementById('composerSmtpWarning');
+    const fromDisplay = document.getElementById('composerFromDisplay');
+    const recipientInput = document.getElementById('composerRecipientEmail');
+    const subjectInput = document.getElementById('composerSubject');
+    const bodyInput = document.getElementById('composerBody');
+    const modalTitle = document.getElementById('composerModalTitle');
+
+    if (!config.user || !config.pass) {
+        warning.style.display = 'block';
+        fromDisplay.textContent = 'Not configured';
+        fromDisplay.style.color = '#EF4444';
+    } else {
+        warning.style.display = 'none';
+        fromDisplay.textContent = (config.senderName ? config.senderName + ' ' : '') + '<' + config.user + '>';
+        fromDisplay.style.color = '#18181B';
+    }
+
+    modalTitle.textContent = 'Send Cold Email to ' + (lead.title || 'Lead');
+
+    // Determine best recipient email
+    let recipientEmail = '';
+    if (lead.decision_makers && lead.decision_makers.length > 0) {
+        const withEmail = lead.decision_makers.find(d => d.email && d.email.includes('@'));
+        if (withEmail) recipientEmail = withEmail.email;
+    }
+    if (!recipientEmail) {
+        recipientEmail = lead.company_email || lead.email || '';
+    }
+    recipientInput.value = recipientEmail;
+
+    // Subject
+    if (prefilledSubject) {
+        subjectInput.value = prefilledSubject;
+    } else if (lead.multi_channel_pitch && lead.multi_channel_pitch.subject_line) {
+        subjectInput.value = lead.multi_channel_pitch.subject_line;
+    } else {
+        subjectInput.value = 'quick question re: ' + (lead.title || 'your business');
+    }
+
+    // Body
+    if (prefilledBody) {
+        bodyInput.value = prefilledBody;
+    } else if (lead.multi_channel_pitch && lead.multi_channel_pitch.email_body) {
+        bodyInput.value = lead.multi_channel_pitch.email_body;
+    } else if (lead.ai_pitch) {
+        bodyInput.value = lead.ai_pitch;
+    } else {
+        const ownerName = (lead.decision_makers && lead.decision_makers[0] && lead.decision_makers[0].full_name) ? lead.decision_makers[0].full_name : 'Team';
+        bodyInput.value = `Hi ${ownerName},\n\nI was looking into ${lead.title} in ${lead.city || 'your area'} and noticed key opportunities to increase your high-intent local customer inquiries.\n\nWould you be open to a quick 3-minute walkthrough showing how we've helped similar businesses scale their client pipeline?\n\nBest regards,\n${config.senderName || 'Growth Team'}`;
+    }
+
+    document.getElementById('emailComposerModalOverlay').style.display = 'flex';
+};
+
+window.closeEmailComposerModal = function() {
+    document.getElementById('emailComposerModalOverlay').style.display = 'none';
+    activeComposerLead = null;
+};
+
+async function sendColdEmailSubmit() {
+    if (!activeComposerLead) return;
+
+    const config = getSmtpConfig();
+    if (!config.user || !config.pass) {
+        showToast('Please configure your Email Settings first.');
+        openEmailSettingsModal();
+        return;
+    }
+
+    const to = document.getElementById('composerRecipientEmail').value.trim();
+    const subject = document.getElementById('composerSubject').value.trim();
+    const message = document.getElementById('composerBody').value.trim();
+
+    if (!to || !to.includes('@')) {
+        showToast('Please enter a valid recipient email address.');
+        return;
+    }
+    if (!subject) {
+        showToast('Please enter an email subject line.');
+        return;
+    }
+    if (!message) {
+        showToast('Please enter the email message body.');
+        return;
+    }
+
+    const submitBtn = document.getElementById('sendEmailSubmitBtn');
+    const submitText = document.getElementById('sendEmailSubmitText');
+    submitBtn.disabled = true;
+    submitText.textContent = 'Sending email...';
+
+    try {
+        const res = await fetch(`/api/leads/${activeComposerLead.id}/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                smtpConfig: config,
+                to,
+                subject,
+                message,
+                decisionMakerId: (activeComposerLead.decision_makers && activeComposerLead.decision_makers[0]) ? activeComposerLead.decision_makers[0].id : null
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast('✅ Cold email sent to ' + to + ' successfully!');
+            closeEmailComposerModal();
+
+            // Update lead locally
+            activeComposerLead.status = 'emailed';
+            renderLeadsTable();
+
+            // If drawer open for this lead, refresh
+            if (leadDrawer.classList.contains('open')) {
+                fetch(`/api/leads/${activeComposerLead.id}`)
+                    .then(r => r.json())
+                    .then(d => { if (d.lead) renderDrawerContent(d.lead); });
+            }
+        } else {
+            showToast('❌ Failed: ' + (data.error || 'Could not deliver email.'));
+        }
+    } catch (err) {
+        showToast('❌ Error sending email: ' + err.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitText.textContent = 'Send Cold Email';
+    }
+}
+
+// --------------------------------------------------------
+// MODULE 7: 1-CLICK ACTIONS & AI PITCH MODAL ENGINE
+// --------------------------------------------------------
+let activePitchLead = null;
+let currentPitchChannel = 'email';
+
+window.openPitchModal = async function(leadId) {
+    const lead = allLeads.find(l => l.id == leadId);
+    if (!lead) {
+        showToast('Lead details not found.');
+        return;
+    }
+    activePitchLead = lead;
+    currentPitchChannel = 'email';
+
+    const modal = document.getElementById('aiPitchModalOverlay');
+    const titleEl = document.getElementById('pitchModalTitle');
+    const subjectGroup = document.getElementById('pitchSubjectGroup');
+    const subjectInput = document.getElementById('pitchModalSubject');
+    const bodyInput = document.getElementById('pitchModalBody');
+    const regenBtn = document.getElementById('modalRegenPitchBtn');
+
+    titleEl.textContent = `Personalized Pitch: ${lead.title}`;
+    modal.style.display = 'flex';
+
+    // Reset tabs to email by default
+    document.querySelectorAll('.channel-tab-btn').forEach(btn => btn.classList.remove('active'));
+    const emailTab = document.getElementById('tabEmailPitch');
+    if (emailTab) emailTab.classList.add('active');
+    if (subjectGroup) subjectGroup.style.display = 'block';
+
+    // If pitch doesn't exist yet, generate on-demand using 3-step framework
+    if (!lead.ai_pitch && (!lead.multi_channel_pitch || !lead.multi_channel_pitch.email_body)) {
+        bodyInput.value = '⚡ Generating tailored pitch using Groq/Gemini 3-Step Framework...';
+        subjectInput.value = 'Generating subject line...';
+        if (regenBtn) regenBtn.disabled = true;
+
+        try {
+            const res = await fetch(`/api/leads/${leadId}/pitch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (data.success) {
+                lead.ai_pitch = data.pitch;
+                lead.multi_channel_pitch = data.multiChannel;
+                showToast('✨ AI pitch generated successfully!');
+            } else {
+                bodyInput.value = 'Failed to generate pitch: ' + (data.error || 'Unknown error');
+                return;
+            }
+        } catch (err) {
+            bodyInput.value = 'Error generating pitch: ' + err.message;
+            return;
+        } finally {
+            if (regenBtn) regenBtn.disabled = false;
+        }
+    }
+
+    populatePitchModalFields();
+};
+
+window.switchPitchChannel = function(channel) {
+    currentPitchChannel = channel;
+    document.querySelectorAll('.channel-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.channel === channel);
+    });
+
+    const subjectGroup = document.getElementById('pitchSubjectGroup');
+    if (subjectGroup) {
+        subjectGroup.style.display = channel === 'email' ? 'block' : 'none';
+    }
+
+    populatePitchModalFields();
+};
+
+function populatePitchModalFields() {
+    if (!activePitchLead) return;
+    const lead = activePitchLead;
+    const subjectInput = document.getElementById('pitchModalSubject');
+    const bodyInput = document.getElementById('pitchModalBody');
+    const multi = lead.multi_channel_pitch || {};
+
+    if (currentPitchChannel === 'email') {
+        subjectInput.value = multi.subject_line || `quick question re: ${lead.title}`;
+        bodyInput.value = multi.email_body || lead.ai_pitch || '';
+    } else if (currentPitchChannel === 'linkedin') {
+        bodyInput.value = multi.linkedin_note || `Hi ${lead.gmb_owner_name || 'there'}, noticed ${lead.title} in ${lead.city || 'your area'}. Let's connect!`;
+    } else if (currentPitchChannel === 'whatsapp') {
+        bodyInput.value = multi.whatsapp_quick_msg || `Hi ${lead.gmb_owner_name || 'there'}! Reached out regarding ${lead.title}.`;
+    }
+}
+
+window.closePitchModal = function() {
+    const modal = document.getElementById('aiPitchModalOverlay');
+    if (modal) modal.style.display = 'none';
+    activePitchLead = null;
+};
+
+window.copyModalPitchText = function(btn) {
+    const bodyInput = document.getElementById('pitchModalBody');
+    if (!bodyInput) return;
+    const text = bodyInput.value.trim();
+    navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = `<span style="color:#15803D; font-weight:600;">✓ Copied</span>`;
+        setTimeout(() => { btn.innerHTML = orig; }, 2000);
+        showToast('Pitch copied to clipboard!');
+    }).catch(err => {
+        showToast('Copy failed: ' + err.message);
+    });
+};
+
+window.regenerateCurrentModalPitch = async function() {
+    if (!activePitchLead) return;
+    const leadId = activePitchLead.id;
+    const regenBtn = document.getElementById('modalRegenPitchBtn');
+    const regenText = document.getElementById('modalRegenPitchText');
+    const bodyInput = document.getElementById('pitchModalBody');
+
+    if (regenBtn) regenBtn.disabled = true;
+    if (regenText) regenText.textContent = '🔄 Generating...';
+
+    try {
+        const res = await fetch(`/api/leads/${leadId}/pitch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+            activePitchLead.ai_pitch = data.pitch;
+            activePitchLead.multi_channel_pitch = data.multiChannel;
+            populatePitchModalFields();
+            showToast('✨ Fresh 3-step pitch generated!');
+        } else {
+            showToast('Generation failed: ' + (data.error || 'Server error'));
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message);
+    } finally {
+        if (regenBtn) regenBtn.disabled = false;
+        if (regenText) regenText.textContent = '🔄 Regenerate';
+    }
+};
+
+window.transferPitchToEmailComposer = function() {
+    if (!activePitchLead) return;
+    const leadId = activePitchLead.id;
+    const subject = document.getElementById('pitchModalSubject').value;
+    const body = document.getElementById('pitchModalBody').value;
+
+    closePitchModal();
+    openEmailComposerModal(leadId, subject, body);
+};
+
+window.triggerRowDeepEnrich = async function(leadId, btn) {
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span>⏳ Enriching...</span>`;
+    showToast(`Running Deep Enrich (Website Crawler + Dorker) on lead #${leadId}...`);
+
+    try {
+        const res = await fetch(`/api/leads/${leadId}/enrich`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success && data.lead) {
+            showToast(`Deep Enrich complete for ${data.lead.title}!`);
+            const idx = allLeads.findIndex(l => l.id == leadId);
+            if (idx >= 0) allLeads[idx] = data.lead;
+            applyFilters(leadId);
+            fetchStats();
+        } else {
+            showToast('Enrich error: ' + (data.error || 'Failed'));
+            btn.innerHTML = origHtml;
+            btn.disabled = false;
+        }
+    } catch (err) {
+        showToast('Enrich network error: ' + err.message);
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+    }
+};
+
+// Legacy drawer trigger alias
+window.triggerGeneratePitch = async function(leadId) {
+    await openPitchModal(leadId);
+};
+
+

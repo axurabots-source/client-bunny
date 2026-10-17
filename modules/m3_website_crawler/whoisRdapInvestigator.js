@@ -92,19 +92,35 @@ async function lookupDomainRegistrant(websiteUrl) {
                     const data = await res.json();
                     const entities = data.entities || [];
                     for (const ent of entities) {
+                        const roles = ent.roles || [];
+                        // STRICT CHECK: Only examine entities explicitly designated as registrant or administrative / owner
+                        // Ignore registrar, technical, or abuse contacts
+                        if (roles.includes('registrar') || roles.includes('abuse') || roles.includes('technical')) {
+                            continue;
+                        }
+                        if (!roles.includes('registrant') && !roles.includes('administrative')) {
+                            continue;
+                        }
+
                         const vcards = ent.vcardArray?.[1] || [];
                         for (const item of vcards) {
                             if (item[0] === 'fn' && item[3]) {
                                 const fn = item[3].trim();
-                                if (!isPrivacyProtected(fn) && !registrantName) registrantName = fn;
+                                if (!isPrivacyProtected(fn) && !registrantName && fn.length > 2) {
+                                    registrantName = fn;
+                                }
                             }
                             if (item[0] === 'email' && item[3]) {
                                 const em = item[3].trim();
-                                if (!isPrivacyProtected(em) && !registrantEmail) registrantEmail = em;
+                                if (!isPrivacyProtected(em) && !registrantEmail && !em.includes('redacted') && !em.toLowerCase().includes('abuse')) {
+                                    registrantEmail = em;
+                                }
                             }
                             if (item[0] === 'org' && item[3]) {
                                 const org = item[3].trim();
-                                if (!isPrivacyProtected(org) && !registrantOrg) registrantOrg = org;
+                                if (!isPrivacyProtected(org) && !registrantOrg) {
+                                    registrantOrg = org;
+                                }
                             }
                         }
                     }
@@ -112,7 +128,39 @@ async function lookupDomainRegistrant(websiteUrl) {
             } catch {}
         }
 
-        // 2. Direct WHOIS socket lookup (especially for .co.uk / .uk / other TLDs)
+        // 2. Nominet RDAP for .uk / .co.uk / .org.uk
+        if (!registrantName && (domain.endsWith('.uk') || domain.endsWith('.co.uk') || domain.endsWith('.org.uk'))) {
+            try {
+                const ukRdapUrl = `https://rdap.nominet.uk/uk/domain/${domain}`;
+                const res = await fetch(ukRdapUrl, {
+                    headers: { 'Accept': 'application/rdap+json, application/json', 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout(4000)
+                });
+                if (res.status === 200) {
+                    const data = await res.json();
+                    const entities = data.entities || [];
+                    for (const ent of entities) {
+                        const roles = ent.roles || [];
+                        if (!roles.includes('registrant') && !roles.includes('administrative')) continue;
+                        const vcards = ent.vcardArray?.[1] || [];
+                        for (const item of vcards) {
+                            if (item[0] === 'fn' && item[3]) {
+                                const fn = item[3].trim();
+                                if (!isPrivacyProtected(fn) && !registrantName && fn.length > 2) registrantName = fn;
+                            }
+                            if (item[0] === 'email' && item[3]) {
+                                const em = item[3].trim();
+                                if (!isPrivacyProtected(em) && !registrantEmail && !em.includes('redacted') && !em.toLowerCase().includes('abuse')) {
+                                    registrantEmail = em;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch {}
+        }
+
+        // 3. Direct WHOIS socket lookup (fallback for other TLDs)
         if (!registrantName) {
             let whoisServer = 'whois.verisign-grs.com';
             if (domain.endsWith('.co.uk') || domain.endsWith('.uk') || domain.endsWith('.org.uk')) {
@@ -134,11 +182,11 @@ async function lookupDomainRegistrant(websiteUrl) {
                     }
                 }
 
-                // Match "Registrant Email: admin@..."
-                const emailMatch = rawWhois.match(/(?:Registrant Email|Admin Email|Contact Email)[\s:]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+                // Match "Registrant Email: admin@..." (STRICT: Never match registrar abuse email)
+                const emailMatch = rawWhois.match(/(?:^|\n)\s*(?:Registrant Email|Registrant Contact Email)[\s:]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
                 if (emailMatch) {
                     const em = emailMatch[1].trim();
-                    if (!isPrivacyProtected(em)) {
+                    if (!isPrivacyProtected(em) && !em.toLowerCase().includes('abuse') && !em.includes('redacted')) {
                         registrantEmail = em;
                     }
                 }

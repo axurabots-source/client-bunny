@@ -5,36 +5,38 @@ const { verifyEmailSMTP, generateEmailPermutations } = require('./smtpVerifier')
 const { parseBioWithAI, generateColdPitch } = require('../m6_ai_engine/aiIntelligence');
 const { lookupUniversalRegistry } = require('./registryInvestigator');
 const { extractDomain, lookupDomainRegistrant } = require('./whoisRdapInvestigator');
-const { findOwnerPersonalSocials, isGenericGatekeeperEmail, isPersonalFacebookUrl } = require('./socialInvestigator');
+const { findOwnerPersonalSocials, isGenericGatekeeperEmail, isPersonalFacebookUrl, dorkOwnerSocialEmail } = require('./socialInvestigator');
 
 /**
- * Detective Intelligence Auto-Enricher
+ * Detective Intelligence Auto-Enricher with 4-Tier Waterfall Pipeline:
  * Strict Compartmentalization:
  * - Company Compartment: Website, Gatekeeper Email (info@/sales@), Company Socials (Pages)
  * - Decision Maker Compartment: Legal/Verified Owner Name, Personal LinkedIn (/in/), Personal Direct Email, Direct WhatsApp
+ *
+ * Waterfall Hierarchy for Owner Email:
+ * Tier 1: Owner Personal LinkedIn Profile Footprint
+ * Tier 2: Owner Personal Facebook / Social Media Direct Footprint
+ * Tier 3: Website Deep Source Code & Legal Pages (Cloudflare unmasking, JSON-LD, team pages)
+ * Tier 4: Predictive Permutations + SMTP MX Handshake Verification (250 OK)
  */
 async function autoEnrichLead(leadId) {
-    console.log(`\n======================================================`);
-    console.log(`⚡ Detective Auto-Enriching Lead ID: ${leadId}`);
-    console.log(`======================================================`);
+    console.log('\n======================================================');
+    console.log(`🔍 Detective Auto-Enriching Lead ID: ${leadId}`);
+    console.log('======================================================');
 
     const lead = await LeadRepository.getLeadById(leadId);
     if (!lead) return null;
 
-    // --------------------------------------------------------
     // Company Compartment State
-    // --------------------------------------------------------
     let companyEmail = lead.company_email || null;
     let companyFacebook = lead.company_facebook || null;
     let companyInstagram = lead.company_instagram || null;
     let companyLinkedin = lead.company_linkedin || null;
     let companyWhatsapp = lead.whatsapp_number || null;
 
-    // --------------------------------------------------------
     // Decision Maker Personal State
-    // --------------------------------------------------------
-    let ownerName = null;
-    let ownerRole = null;
+    let ownerName = lead.gmb_owner_name || null;
+    let ownerRole = lead.gmb_owner_name ? 'Business Owner' : null;
     let ownerPersonalEmail = null;
     let ownerLinkedIn = null;
     let ownerFacebook = null;
@@ -42,33 +44,25 @@ async function autoEnrichLead(leadId) {
     let ownerPersonalWhatsapp = null;
     let confidenceScore = 60;
     let emailVerified = false;
+    let emailResolutionMethod = null;
 
     // --------------------------------------------------------
     // STEP 1: Website Deep Crawl & Bio Parsing
     // --------------------------------------------------------
     if (lead.website) {
-        console.log(`🕸️ [Step 1] Crawling website: ${lead.website}`);
+        console.log(`🌐 [Step 1] Crawling website: ${lead.website}`);
         try {
             const crawlRes = await crawlWebsite(lead.website, lead.id, lead.title);
             if (crawlRes) {
-                // Separate company socials from website
+                // Separate company socials
                 if (crawlRes.social_links) {
-                    if (crawlRes.social_links.facebook && !companyFacebook) {
-                        companyFacebook = crawlRes.social_links.facebook;
-                    }
-                    if (crawlRes.social_links.instagram && !companyInstagram) {
-                        companyInstagram = crawlRes.social_links.instagram;
-                    }
-                    if (crawlRes.social_links.whatsapp && !companyWhatsapp) {
-                        companyWhatsapp = crawlRes.social_links.whatsapp;
-                    }
+                    if (crawlRes.social_links.facebook && !companyFacebook) companyFacebook = crawlRes.social_links.facebook;
+                    if (crawlRes.social_links.instagram && !companyInstagram) companyInstagram = crawlRes.social_links.instagram;
+                    if (crawlRes.social_links.whatsapp && !companyWhatsapp) companyWhatsapp = crawlRes.social_links.whatsapp;
                     if (crawlRes.social_links.linkedin) {
                         const li = crawlRes.social_links.linkedin;
-                        if (li.includes('/company/') && !companyLinkedin) {
-                            companyLinkedin = li;
-                        } else if (li.includes('/in/') && !ownerLinkedIn) {
-                            ownerLinkedIn = li;
-                        }
+                        if (li.includes('/company/') && !companyLinkedin) companyLinkedin = li;
+                        else if (li.includes('/in/') && !ownerLinkedIn) ownerLinkedIn = li;
                     }
                 }
 
@@ -78,14 +72,17 @@ async function autoEnrichLead(leadId) {
                         if (isGenericGatekeeperEmail(em)) {
                             if (!companyEmail) companyEmail = em;
                         } else {
-                            if (!ownerPersonalEmail) ownerPersonalEmail = em;
+                            if (!ownerPersonalEmail) {
+                                ownerPersonalEmail = em;
+                                emailResolutionMethod = 'Tier 3: Website Source Code';
+                            }
                         }
                     }
                 }
 
                 // Bio parsing with Groq AI
                 if (crawlRes.aboutTextPreview) {
-                    console.log(`🤖 [Step 1.b] Running Groq AI bio forensic parser on website text...`);
+                    console.log('🧠 [Step 1.b] Running Groq AI bio parser on website text...');
                     const aiBio = await parseBioWithAI(crawlRes.aboutTextPreview, lead.title);
                     if (aiBio) {
                         if (aiBio.owner_name && !ownerName) {
@@ -95,6 +92,7 @@ async function autoEnrichLead(leadId) {
                         }
                         if (aiBio.direct_email && !ownerPersonalEmail) {
                             ownerPersonalEmail = aiBio.direct_email;
+                            emailResolutionMethod = 'Tier 3: Website Bio Parsing';
                         }
                         if (aiBio.whatsapp_number && !ownerPersonalWhatsapp) {
                             ownerPersonalWhatsapp = aiBio.whatsapp_number;
@@ -103,43 +101,15 @@ async function autoEnrichLead(leadId) {
                 }
             }
         } catch (crawlErr) {
-            console.warn("Website crawl step note:", crawlErr.message);
+            console.warn('Website crawl note:', crawlErr.message);
         }
     }
 
     // --------------------------------------------------------
-    // STEP 2: RDAP / WHOIS Domain Registrant Lookup
-    // --------------------------------------------------------
-    if (lead.website && (!ownerName || !ownerPersonalEmail)) {
-        console.log(`🔍 [Step 2] Querying RDAP/WHOIS registrant registry for domain...`);
-        try {
-            const rdapRes = await lookupDomainRegistrant(lead.website);
-            if (rdapRes) {
-                if (rdapRes.registrant_name && !ownerName) {
-                    console.log(`📋 RDAP Registrant Name Discovered: ${rdapRes.registrant_name}`);
-                    ownerName = rdapRes.registrant_name;
-                    ownerRole = 'Domain Registrant / Owner';
-                    confidenceScore = 75;
-                }
-                if (rdapRes.registrant_email && !ownerPersonalEmail) {
-                    console.log(`📨 RDAP Registrant Email Discovered: ${rdapRes.registrant_email}`);
-                    if (!isGenericGatekeeperEmail(rdapRes.registrant_email)) {
-                        ownerPersonalEmail = rdapRes.registrant_email;
-                    } else if (!companyEmail) {
-                        companyEmail = rdapRes.registrant_email;
-                    }
-                }
-            }
-        } catch (rdapErr) {
-            console.warn("RDAP lookup note:", rdapErr.message);
-        }
-    }
-
-    // --------------------------------------------------------
-    // STEP 3: Official Corporate Registry (UK Companies House / US SOS)
+    // STEP 2: Official Corporate Registry (UK Companies House / State SOS)
     // --------------------------------------------------------
     if (!ownerName) {
-        console.log(`🏛️ [Step 3] Checking Official Corporate Registries (UK Companies House / State SOS)...`);
+        console.log('🏛️ [Step 2] Checking Official Corporate Registries (UK Companies House / State SOS)...');
         try {
             const regRes = await lookupUniversalRegistry(lead.title, lead.country || 'United Kingdom', lead.city || '', lead.state_province || '');
             if (regRes && regRes.primary_officer) {
@@ -149,28 +119,74 @@ async function autoEnrichLead(leadId) {
                 confidenceScore = 90;
             }
         } catch (regErr) {
-            console.warn("Registry lookup note:", regErr.message);
+            console.warn('Registry lookup note:', regErr.message);
         }
     }
 
     // --------------------------------------------------------
-    // STEP 4: Targeted Personal Social Investigator
+    // STEP 3: RDAP / WHOIS Domain Registrant Lookup (Fallback)
+    // --------------------------------------------------------
+    if (lead.website && (!ownerName || !ownerPersonalEmail)) {
+        console.log('📜 [Step 3] Querying RDAP/WHOIS registrant registry for domain...');
+        try {
+            const rdapRes = await lookupDomainRegistrant(lead.website);
+            if (rdapRes) {
+                if (rdapRes.registrant_name && !ownerName) {
+                    console.log(`✅ RDAP Registrant Discovered: ${rdapRes.registrant_name}`);
+                    ownerName = rdapRes.registrant_name;
+                    ownerRole = 'Domain Registrant / Owner';
+                    confidenceScore = 75;
+                }
+                if (rdapRes.registrant_email && !ownerPersonalEmail) {
+                    if (!isGenericGatekeeperEmail(rdapRes.registrant_email)) {
+                        ownerPersonalEmail = rdapRes.registrant_email;
+                        emailResolutionMethod = 'WHOIS Registrant Direct';
+                    } else if (!companyEmail) {
+                        companyEmail = rdapRes.registrant_email;
+                    }
+                }
+            }
+        } catch (rdapErr) {
+            console.warn('RDAP lookup note:', rdapErr.message);
+        }
+    }
+
+    // --------------------------------------------------------
+    // STEP 4: WATERFALL TIER 1 & TIER 2 - Owner Personal Socials & Social Footprints
     // --------------------------------------------------------
     if (ownerName) {
-        console.log(`🔎 [Step 4] Searching Personal Socials (strictly /in/) for ${ownerName}...`);
+        console.log(`🔎 [Step 4: Social Waterfall] Investigating Personal Socials for ${ownerName}...`);
         try {
             const socials = await findOwnerPersonalSocials(ownerName, lead.title, lead.city);
-            if (socials.personal_linkedin && !ownerLinkedIn) ownerLinkedIn = socials.personal_linkedin;
-            if (socials.personal_facebook && !ownerFacebook) ownerFacebook = socials.personal_facebook;
-            if (socials.personal_twitter && !ownerTwitter) ownerTwitter = socials.personal_twitter;
+            if ((socials.personalLinkedIn || socials.personal_linkedin) && !ownerLinkedIn) {
+                ownerLinkedIn = socials.personalLinkedIn || socials.personal_linkedin;
+            }
+            if ((socials.personalFacebook || socials.personal_facebook) && !ownerFacebook) {
+                ownerFacebook = socials.personalFacebook || socials.personal_facebook;
+            }
+            if ((socials.personalTwitter || socials.personal_twitter) && !ownerTwitter) {
+                ownerTwitter = socials.personalTwitter || socials.personal_twitter;
+            }
+
+            // TIER 1 & 2 Dork for Social Email Footprint
+            if (!ownerPersonalEmail) {
+                const domain = lead.website ? extractDomain(lead.website) : '';
+                const socialDorkEmail = await dorkOwnerSocialEmail(ownerName, lead.title, domain);
+                if (socialDorkEmail) {
+                    console.log(`🎯 Owner Personal Email Unmasked via Social Footprint: ${socialDorkEmail}`);
+                    ownerPersonalEmail = socialDorkEmail;
+                    emailVerified = true;
+                    emailResolutionMethod = 'Tier 2: Personal Social Footprint';
+                    confidenceScore = 90;
+                }
+            }
         } catch (socErr) {
-            console.warn("Social investigator note:", socErr.message);
+            console.warn('Social investigator note:', socErr.message);
         }
     }
 
     // Fallback Dork search for LinkedIn if still missing
     if (!ownerLinkedIn) {
-        console.log(`🕵️‍♂️ [Step 4.b] Running targeted dork fallback for ${lead.title}...`);
         try {
             const dorkRes = await resolveDorkContacts(lead.title, lead.city || lead.country || '', lead.id);
             if (dorkRes) {
@@ -182,58 +198,52 @@ async function autoEnrichLead(leadId) {
                         ownerRole = topLi.role || 'Executive';
                     }
                 }
-                if (dorkRes.facebookUrls && dorkRes.facebookUrls.length > 0) {
-                    const fb = dorkRes.facebookUrls[0];
-                    if (isPersonalFacebookUrl(fb, lead.title)) {
-                        if (!ownerFacebook) ownerFacebook = fb;
-                    } else {
-                        if (!companyFacebook) companyFacebook = fb;
-                    }
-                }
                 if (dorkRes.directEmails && dorkRes.directEmails.length > 0 && !ownerPersonalEmail) {
                     const em = dorkRes.directEmails[0];
                     if (!isGenericGatekeeperEmail(em)) {
                         ownerPersonalEmail = em;
+                        emailResolutionMethod = 'Dorking Direct Email';
                     } else if (!companyEmail) {
                         companyEmail = em;
                     }
                 }
             }
         } catch (dorkErr) {
-            console.warn("Dork step note:", dorkErr.message);
+            console.warn('Dork fallback note:', dorkErr.message);
         }
     }
 
     // --------------------------------------------------------
-    // STEP 5: Direct Personal Email Synthesis + SMTP 250 Check
+    // STEP 5: Verify Existing Personal Email or Synthesize (WATERFALL TIER 4)
     // --------------------------------------------------------
-    if (ownerPersonalEmail) {
-        console.log(`📨 Verifying direct personal email via SMTP: ${ownerPersonalEmail}...`);
+    if (ownerPersonalEmail && !emailVerified) {
+        console.log(`📧 Verifying direct personal email via SMTP: ${ownerPersonalEmail}...`);
         const check = await verifyEmailSMTP(ownerPersonalEmail);
         if (check.valid) {
             emailVerified = true;
             confidenceScore = 95;
             console.log(`✅ Direct personal email verified 250 OK: ${ownerPersonalEmail}`);
         } else {
-            console.log(`⚠️ Email did not pass handshake (${check.reason}).`);
-            // If it failed, don't keep as verified personal email
+            console.log(`⚠️ Candidate email did not pass handshake (${check.reason}). Attempting permutations...`);
             ownerPersonalEmail = null;
         }
     }
 
-    // If no direct email, synthesize from Owner Name + Company Domain
+    // TIER 4: Predictive Permutations + SMTP MX Handshake (Last Resort)
     if (!emailVerified && ownerName && lead.website) {
         const domain = extractDomain(lead.website);
         if (domain) {
             const perms = generateEmailPermutations(ownerName, domain);
-            console.log(`🔀 Synthesizing ${perms.length} direct email permutations for ${ownerName}@${domain}...`);
+            console.log(`🎯 [Tier 4] Synthesizing ${perms.length} direct email permutations for ${ownerName}@${domain}...`);
 
             for (const pEmail of perms.slice(0, 4)) {
+                console.log(`   -> Testing MX handshake for: ${pEmail}...`);
                 const check = await verifyEmailSMTP(pEmail);
-                if (check.valid && check.deliverable === 'yes') {
-                    console.log(`🎯 Personal Permutation Verified 250 OK: ${pEmail}! Early Exit.`);
+                if (check.valid && (check.deliverable === 'yes' || check.deliverable === 'probable')) {
+                    console.log(`🎉 Personal Permutation Verified 250 OK: ${pEmail}!`);
                     ownerPersonalEmail = pEmail;
                     emailVerified = true;
+                    emailResolutionMethod = 'Tier 4: Predictive Permutation (250 OK)';
                     confidenceScore = 95;
                     break;
                 }
@@ -242,14 +252,14 @@ async function autoEnrichLead(leadId) {
     }
 
     // --------------------------------------------------------
-    // STEP 6: Save Decision Maker & Company Info with Clean Separation
+    // STEP 6: Save Decision Maker Record
     // --------------------------------------------------------
     if (ownerName || ownerPersonalEmail || ownerLinkedIn) {
         const dmRecord = {
             full_name: ownerName || 'Business Owner',
             title_role: ownerRole || 'Owner / Director',
             email: ownerPersonalEmail,
-            email_source: emailVerified ? 'smtp_verified' : 'detective_investigation',
+            email_source: emailResolutionMethod || (emailVerified ? 'smtp_verified' : 'detective_investigation'),
             linkedin_url: ownerLinkedIn,
             facebook_url: ownerFacebook,
             instagram_url: null,
@@ -261,13 +271,10 @@ async function autoEnrichLead(leadId) {
     }
 
     // --------------------------------------------------------
-    // STEP 7: Generate Tailored AI Cold Pitch (Groq)
+    // STEP 7: Token Saver Mode (AI Pitch is generated on-demand)
     // --------------------------------------------------------
-    console.log(`✍️ Generating Personalized B2B Cold Pitch via Groq AI...`);
-    const dms = await LeadRepository.getDecisionMakers(lead.id);
-    const topDecisionMaker = (dms && dms.length > 0) ? dms[0] : { full_name: ownerName || 'Owner', title_role: ownerRole || 'Founder' };
-
-    const pitch = await generateColdPitch(lead, topDecisionMaker);
+    // NOTE: AI Pitch generation moved to on-demand endpoint POST /api/leads/:id/generate-pitch
+    // to prevent burning Groq / Gemini tokens during bulk scraping & enrichment.
 
     // Update Company Compartment in leads table
     await pool.query(`
@@ -277,15 +284,13 @@ async function autoEnrichLead(leadId) {
             company_instagram = $3,
             company_linkedin = $4,
             whatsapp_number = COALESCE($5, whatsapp_number),
-            ai_pitch = $6,
             status = 'enriched',
             updated_at = NOW() 
-        WHERE id = $7
-    `, [companyEmail, companyFacebook, companyInstagram, companyLinkedin, companyWhatsapp, pitch, lead.id]);
+        WHERE id = $6
+    `, [companyEmail, companyFacebook, companyInstagram, companyLinkedin, companyWhatsapp, lead.id]);
 
-    // Fetch complete updated lead
     const fullyEnrichedLead = await LeadRepository.getLeadById(lead.id);
-    console.log(`✅ Fully enriched Lead ID ${lead.id} with strict Company vs Owner separation!`);
+    console.log(`🎉 Fully enriched Lead ID ${lead.id} with strict Company vs Owner separation!\n`);
     return fullyEnrichedLead;
 }
 

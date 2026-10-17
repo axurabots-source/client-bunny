@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+    <rect width="512" height="512" fill="#000000"/>
+    <g transform="translate(64, 64) scale(0.75)">
+        <defs>
+            <linearGradient id="mAccentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#FFFFFF"/>
+                <stop offset="100%" stop-color="#E4E4E7"/>
+            </linearGradient>
+        </defs>
+        <!-- Geometric Origami Bunny -->
+        <g transform="translate(256, 256)">
+            <polygon points="-70,-170 -120,-60 -50,-30" fill="url(#mAccentGrad)" opacity="0.95"/>
+            <polygon points="-120,-60 -70,-170 -95,-180" fill="#A1A1AA" opacity="0.8"/>
+            <polygon points="70,-170 120,-60 50,-30" fill="url(#mAccentGrad)" opacity="0.95"/>
+            <polygon points="120,-60 70,-170 95,-180" fill="#A1A1AA" opacity="0.8"/>
+            <polygon points="0,-75 80,-10 0,65 -80,-10" fill="#FFFFFF"/>
+            <polygon points="0,65 60,135 0,165 -60,135" fill="url(#mAccentGrad)"/>
+            <polygon points="-80,-10 0,65 -60,135 -110,50" fill="#D4D4D8"/>
+            <polygon points="80,-10 0,65 60,135 110,50" fill="#E4E4E7"/>
+            <circle cx="0" cy="5" r="14" fill="#18181B"/>
+            <circle cx="0" cy="5" r="6" fill="#22C55E"/>
+        </g>
+    </g>
+</svg>
