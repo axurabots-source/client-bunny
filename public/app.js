@@ -25,12 +25,14 @@ const toastEl = document.getElementById('toast');
 const navLeads = document.getElementById('navLeads');
 const navHunt = document.getElementById('navHunt');
 const navLists = document.getElementById('navLists');
+const navInbox = document.getElementById('navInbox');
 const navAnalytics = document.getElementById('navAnalytics');
 
 // Screens
 const screenLeads = document.getElementById('screenLeads');
 const screenHunt = document.getElementById('screenHunt');
 const screenLists = document.getElementById('screenLists');
+const screenInbox = document.getElementById('screenInbox');
 const screenAnalytics = document.getElementById('screenAnalytics');
 
 // Leads Table Elements
@@ -113,7 +115,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchStats(),
         fetchCities(),
         fetchLeads(),
-        fetchJobs()
+        fetchJobs(),
+        fetchInboxStats()
     ]);
 });
 
@@ -185,7 +188,7 @@ function initPWA() {
     // 5. Handle PWA Shortcut URL Params (e.g. /?screen=hunt)
     const urlParams = new URLSearchParams(window.location.search);
     const screenTarget = urlParams.get('screen');
-    if (screenTarget && ['leads', 'hunt', 'lists', 'analytics'].includes(screenTarget)) {
+    if (screenTarget && ['leads', 'hunt', 'lists', 'inbox', 'analytics'].includes(screenTarget)) {
         setTimeout(() => switchScreen(screenTarget), 100);
     }
 }
@@ -221,6 +224,7 @@ function initNavigation() {
         { el: navLeads, screen: 'leads', title: 'Leads' },
         { el: navHunt, screen: 'hunt', title: 'Hunt Launchpad' },
         { el: navLists, screen: 'lists', title: 'Lists' },
+        { el: navInbox, screen: 'inbox', title: 'Omnichannel Inbox' },
         { el: navAnalytics, screen: 'analytics', title: 'Analytics' }
     ];
 
@@ -237,6 +241,7 @@ function initNavigation() {
         { el: document.getElementById('bnavLeads'), screen: 'leads' },
         { el: document.getElementById('bnavHunt'), screen: 'hunt' },
         { el: document.getElementById('bnavLists'), screen: 'lists' },
+        { el: document.getElementById('bnavInbox'), screen: 'inbox' },
         { el: document.getElementById('bnavAnalytics'), screen: 'analytics' }
     ];
 
@@ -289,6 +294,11 @@ function switchScreen(screenName) {
         screenLists.classList.add('active');
         breadcrumbTitle.textContent = 'Lead Lists';
         renderLists();
+    } else if (screenName === 'inbox') {
+        screenInbox.classList.add('active');
+        breadcrumbTitle.textContent = 'Omnichannel Inbox';
+        loadInboxConversations();
+        fetchInboxStats();
     } else if (screenName === 'analytics') {
         screenAnalytics.classList.add('active');
         breadcrumbTitle.textContent = 'Analytics';
@@ -2062,5 +2072,641 @@ window.triggerRowDeepEnrich = async function(leadId, btn) {
 window.triggerGeneratePitch = async function(leadId) {
     await openPitchModal(leadId);
 };
+
+// ==========================================================
+// MODULE 10: OMNICHANNEL UNIFIED INBOX LOGIC
+// ==========================================================
+let allInboxConversations = [];
+let activeConversationId = null;
+let currentInboxChannelFilter = 'all';
+let activeConversationLeadId = null;
+
+// Fetch global unread stats for badges
+window.fetchInboxStats = async function() {
+    try {
+        const res = await fetch('/api/inbox/stats');
+        const data = await res.json();
+        if (data.success && data.stats) {
+            const unread = data.stats.totalUnread || 0;
+            const sidebarBadge = document.getElementById('sidebarInboxCount');
+            const bnavBadge = document.getElementById('bnavInboxCount');
+
+            if (sidebarBadge) {
+                sidebarBadge.textContent = unread;
+                sidebarBadge.style.display = unread > 0 ? 'inline-block' : 'none';
+            }
+            if (bnavBadge) {
+                bnavBadge.textContent = unread;
+                bnavBadge.style.display = unread > 0 ? 'inline-block' : 'none';
+            }
+        }
+    } catch (err) {
+        console.warn('[Inbox] fetchInboxStats error:', err.message);
+    }
+};
+
+// Load conversations list
+window.loadInboxConversations = async function(silent = false) {
+    const listEl = document.getElementById('inboxThreadsList');
+    if (!listEl) return;
+
+    if (!silent && allInboxConversations.length === 0) {
+        listEl.innerHTML = '<div class="table-loading" style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">Loading conversations...</div>';
+    }
+
+    try {
+        const url = `/api/inbox/conversations?channel=${encodeURIComponent(currentInboxChannelFilter)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.success) {
+            allInboxConversations = data.conversations || [];
+            renderInboxThreads();
+        } else {
+            listEl.innerHTML = `<div style="padding: 20px; font-size: 13px; color: #DC2626; text-align: center;">Error loading chats: ${escapeHtml(data.error || 'Server error')}</div>`;
+        }
+    } catch (err) {
+        listEl.innerHTML = `<div style="padding: 20px; font-size: 13px; color: #DC2626; text-align: center;">Network error: ${escapeHtml(err.message)}</div>`;
+    }
+};
+
+// Render conversations list with search filtering
+function renderInboxThreads() {
+    const listEl = document.getElementById('inboxThreadsList');
+    if (!listEl) return;
+
+    const searchVal = (document.getElementById('inboxSearchInput')?.value || '').trim().toLowerCase();
+
+    let filtered = allInboxConversations;
+    if (searchVal) {
+        filtered = filtered.filter(c => {
+            const name = (c.participant_name || '').toLowerCase();
+            const contact = (c.participant_contact || '').toLowerCase();
+            const title = (c.lead_title || '').toLowerCase();
+            const lastMsg = (c.last_message_preview || '').toLowerCase();
+            return name.includes(searchVal) || contact.includes(searchVal) || title.includes(searchVal) || lastMsg.includes(searchVal);
+        });
+    }
+
+    if (filtered.length === 0) {
+        listEl.innerHTML = `
+            <div style="padding: 32px 16px; text-align: center; color: var(--text-muted);">
+                <div style="font-size: 24px; margin-bottom: 8px;">📬</div>
+                <div style="font-weight: 600; font-size: 13px; color: var(--text-primary); margin-bottom: 4px;">No conversations yet</div>
+                <p style="font-size: 12px; line-height: 1.4; margin: 0 auto; max-width: 200px;">
+                    Connect your channels or run email sync to receive prospect responses.
+                </p>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="openChannelsModal()" style="margin-top: 12px;">
+                    <span>Connect Channels</span>
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    const channelIcons = {
+        email: '✉️',
+        whatsapp: '💬',
+        instagram: '📸'
+    };
+
+    listEl.innerHTML = filtered.map(c => {
+        const isActive = c.id === activeConversationId;
+        const icon = channelIcons[c.channel] || '💬';
+        const displayName = escapeHtml(c.contact_name || c.participant_name || c.contact_identifier || c.participant_contact || 'Prospect');
+        const contactSub = escapeHtml(c.contact_identifier || c.participant_contact || '');
+        const leadTag = c.lead_title ? `<span style="font-size: 10px; background: #EEF2FF; color: #4338CA; padding: 1px 6px; border-radius: 3px; font-weight: 500; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(c.lead_title)}</span>` : '';
+        const preview = escapeHtml(c.last_message_preview || 'No messages');
+        const timeAgo = c.last_message_at ? formatTimeAgo(new Date(c.last_message_at)) : '';
+        const unreadBadge = (c.unread_count > 0) ? `<span class="thread-unread-badge">${c.unread_count}</span>` : '';
+
+        return `
+            <div class="thread-item ${isActive ? 'active' : ''} ${c.unread_count > 0 ? 'unread' : ''}" onclick="openConversation(${c.id})">
+                <div class="thread-item-header">
+                    <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                        <span class="thread-channel-icon" title="${c.channel}">${icon}</span>
+                        <strong class="thread-name">${displayName}</strong>
+                    </div>
+                    <span class="thread-time">${timeAgo}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; margin: 2px 0 4px 0;">
+                    ${leadTag}
+                    <span style="font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contactSub}</span>
+                </div>
+                <div class="thread-preview-row">
+                    <span class="thread-preview-text">${preview}</span>
+                    ${unreadBadge}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Open and select conversation thread
+window.openConversation = async function(id) {
+    activeConversationId = id;
+
+    // Toggle active thread styling
+    renderInboxThreads();
+
+    // Responsive: switch to chat view on mobile screens
+    document.body.classList.add('mobile-inbox-open');
+
+    const emptyView = document.getElementById('inboxEmptyView');
+    const activeView = document.getElementById('inboxActiveChat');
+    const msgContainer = document.getElementById('chatMessagesContainer');
+
+    if (emptyView) emptyView.style.display = 'none';
+    if (activeView) activeView.style.display = 'flex';
+
+    if (msgContainer) {
+        msgContainer.innerHTML = '<div class="table-loading" style="padding: 24px; text-align: center; color: var(--text-muted);">Loading message stream...</div>';
+    }
+
+    try {
+        const res = await fetch(`/api/inbox/conversations/${id}`);
+        const data = await res.json();
+
+        if (!data.success || !data.conversation) {
+            showToast('Failed to load conversation: ' + (data.error || 'Not found'));
+            return;
+        }
+
+        const conv = data.conversation;
+        const messages = conv.messages || data.messages || [];
+
+        // Set Lead Context
+        activeConversationLeadId = conv.lead_id;
+
+        // Populate Chat Header
+        const nameEl = document.getElementById('activeChatName');
+        const avatarEl = document.getElementById('activeChatAvatar');
+        const channelBadge = document.getElementById('activeChatChannelBadge');
+        const metaEl = document.getElementById('activeChatMeta');
+        const leadBtn = document.getElementById('viewLeadProfileFromChatBtn');
+        const replyIndicator = document.getElementById('replyChannelIndicator');
+
+        const contactTitle = conv.contact_name || conv.participant_name || conv.contact_identifier || conv.participant_contact || 'Prospect';
+        const contactIdentifier = conv.contact_identifier || conv.participant_contact || '';
+        const initial = contactTitle.charAt(0).toUpperCase();
+
+        if (avatarEl) avatarEl.textContent = initial;
+        if (nameEl) nameEl.textContent = contactTitle;
+
+        if (channelBadge) {
+            channelBadge.className = `chat-channel-badge ${conv.channel}`;
+            channelBadge.textContent = conv.channel.toUpperCase();
+        }
+
+        if (metaEl) {
+            let metaText = contactIdentifier;
+            if (conv.lead_title) metaText += ` • ${conv.lead_title}`;
+            if (conv.lead_city) metaText += ` (${conv.lead_city})`;
+            metaEl.textContent = metaText;
+        }
+
+        if (leadBtn) {
+            leadBtn.style.display = conv.lead_id ? 'inline-flex' : 'none';
+        }
+
+        if (replyIndicator) {
+            replyIndicator.textContent = `Replying via ${conv.channel.toUpperCase()} (${contactIdentifier})`;
+        }
+
+        // Render Messages History
+        renderChatMessages(messages, conv);
+
+        // Refresh stats badge
+        fetchInboxStats();
+
+    } catch (err) {
+        showToast('Error loading conversation: ' + err.message);
+    }
+};
+
+// Render message bubbles in chat stream
+function renderChatMessages(messages, conv) {
+    const container = document.getElementById('chatMessagesContainer');
+    if (!container) return;
+
+    if (!messages || messages.length === 0) {
+        container.innerHTML = `
+            <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 13px;">
+                No messages recorded in this conversation yet.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = messages.map(m => {
+        const isOutbound = m.direction === 'outbound';
+        const rowClass = isOutbound ? 'outbound' : 'inbound';
+        const senderLabel = isOutbound ? 'You' : escapeHtml(conv.contact_name || conv.participant_name || conv.contact_identifier || conv.participant_contact || 'Prospect');
+        const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const dateStr = m.created_at ? new Date(m.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+
+        const subjectHtml = m.subject ? `<div style="font-weight: 600; font-size: 12px; margin-bottom: 4px; opacity: 0.9;">Subject: ${escapeHtml(m.subject)}</div>` : '';
+        const textHtml = escapeHtml(m.body || m.message_body || m.subject || '').replace(/\n/g, '<br>');
+
+        return `
+            <div class="chat-bubble-row ${rowClass}">
+                <div class="chat-bubble ${rowClass}">
+                    ${subjectHtml}
+                    <div>${textHtml}</div>
+                </div>
+                <div class="chat-bubble-meta">
+                    ${senderLabel} • ${dateStr} at ${timeStr}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Auto-scroll to bottom of conversation
+    container.scrollTop = container.scrollHeight;
+}
+
+// Mobile back button action to return to list
+window.closeMobileChat = function() {
+    document.body.classList.remove('mobile-inbox-open');
+};
+
+// Filter by channel tabs
+window.filterInboxChannel = function(channel, btn) {
+    currentInboxChannelFilter = channel;
+
+    document.querySelectorAll('.inbox-tab-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    loadInboxConversations();
+};
+
+// Send reply in active conversation
+window.sendActiveChatReply = async function() {
+    if (!activeConversationId) {
+        showToast('Please select a conversation first.');
+        return;
+    }
+
+    const input = document.getElementById('chatReplyInput');
+    const sendBtn = document.getElementById('sendReplyBtn');
+    if (!input) return;
+
+    const messageText = input.value.trim();
+    if (!messageText) {
+        showToast('Please write a message before sending.');
+        input.focus();
+        return;
+    }
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span>Sending...</span>';
+    }
+
+    try {
+        const res = await fetch(`/api/inbox/conversations/${activeConversationId}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: messageText })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast('✓ Reply dispatched successfully!');
+            input.value = '';
+
+            // Optimistically append outbound bubble
+            const container = document.getElementById('chatMessagesContainer');
+            if (container) {
+                const now = new Date();
+                const bubbleHtml = `
+                    <div class="chat-bubble-row outbound">
+                        <div class="chat-bubble outbound">
+                            <div>${escapeHtml(messageText).replace(/\n/g, '<br>')}</div>
+                        </div>
+                        <div class="chat-bubble-meta">
+                            You • Just now
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', bubbleHtml);
+                container.scrollTop = container.scrollHeight;
+            }
+
+            // Refresh list in background
+            loadInboxConversations(true);
+        } else {
+            showToast('Reply failed: ' + (data.error || 'Server error'));
+        }
+    } catch (err) {
+        showToast('Network error sending reply: ' + err.message);
+    } finally {
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                <span>Send</span>
+            `;
+        }
+    }
+};
+
+// AI Suggest contextual reply
+window.suggestAIReplyForCurrentChat = async function() {
+    if (!activeConversationId) {
+        showToast('Please select an active chat first.');
+        return;
+    }
+
+    const input = document.getElementById('chatReplyInput');
+    if (!input) return;
+
+    showToast('✨ Generating AI reply based on conversation context...');
+
+    try {
+        if (activeConversationLeadId) {
+            const res = await fetch(`/api/leads/${activeConversationLeadId}`);
+            const data = await res.json();
+            if (data.success && data.lead) {
+                const lead = data.lead;
+                const painPoints = (lead.pain_points || []).map(p => formatPainPoint(p)).join(', ');
+                const suggestion = `Hi ${lead.gmb_owner_name || 'there'}! Thanks for getting back to me. I'd love to share a quick 2-minute Loom breakdown showing how we can solve ${painPoints || 'client acquisition bottlenecks'} for ${lead.title}. Are you open to reviewing it this week?`;
+                input.value = suggestion;
+                input.focus();
+                showToast('✨ High-converting AI reply inserted!');
+                return;
+            }
+        }
+
+        // Generic fallback
+        input.value = `Hi there! Thank you for your reply. Could you let me know what day this week works best for a quick 10-minute discovery call? Looking forward to connecting.`;
+        input.focus();
+        showToast('✨ AI reply suggestion inserted!');
+    } catch (err) {
+        showToast('AI suggestion error: ' + err.message);
+    }
+};
+
+// Trigger manual IMAP email inbound sync
+window.triggerEmailSync = async function(btn) {
+    const origHtml = btn ? btn.innerHTML : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳ Syncing IMAP...</span>`;
+    }
+
+    showToast('Connecting to IMAP server to fetch prospect emails...');
+
+    try {
+        const res = await fetch('/api/inbox/email/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(`✓ Sync complete! ${data.syncedCount || 0} messages fetched.`);
+            loadInboxConversations();
+            fetchInboxStats();
+        } else {
+            showToast('Email sync failed: ' + (data.error || 'Check IMAP settings'));
+        }
+    } catch (err) {
+        showToast('Sync network error: ' + err.message);
+    } finally {
+        if (btn && origHtml) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+        }
+    }
+};
+
+// Open lead profile drawer from current chat
+window.openLeadProfileFromCurrentChat = function() {
+    if (activeConversationLeadId) {
+        window.openLeadDetail(activeConversationLeadId);
+    } else {
+        showToast('No matched CRM lead associated with this conversation.');
+    }
+};
+
+// ==========================================================
+// CHANNELS MODAL (CONNECT EMAIL / WHATSAPP / INSTAGRAM)
+// ==========================================================
+window.openChannelsModal = async function() {
+    const modal = document.getElementById('channelsModalOverlay');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    // Switch to first tab by default
+    switchChannelTab('email');
+
+    // Pre-fill existing channel settings from server
+    try {
+        const res = await fetch('/api/inbox/channels');
+        const data = await res.json();
+        if (data.success && data.channels && data.channels.email) {
+            const emailCfg = data.channels.email.config || {};
+            if (emailCfg.imap_host) document.getElementById('imapHost').value = emailCfg.imap_host;
+            if (emailCfg.imap_port) document.getElementById('imapPort').value = emailCfg.imap_port;
+            if (emailCfg.email) document.getElementById('imapEmail').value = emailCfg.email;
+        }
+    } catch (err) {
+        console.warn('Could not fetch channel settings:', err.message);
+    }
+};
+
+window.closeChannelsModal = function() {
+    const modal = document.getElementById('channelsModalOverlay');
+    if (modal) modal.style.display = 'none';
+};
+
+window.switchChannelTab = function(tabName, btn) {
+    const tabs = ['email', 'wa', 'ig'];
+    tabs.forEach(t => {
+        const tabEl = document.getElementById('chanTab' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (tabEl) tabEl.style.display = (t === tabName.toLowerCase() || (t === 'wa' && tabName === 'whatsapp') || (t === 'ig' && tabName === 'instagram')) ? 'block' : 'none';
+    });
+
+    document.querySelectorAll('.channel-nav-tab').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+};
+
+window.saveAndSyncEmailChannel = async function() {
+    const host = document.getElementById('imapHost')?.value.trim();
+    const port = parseInt(document.getElementById('imapPort')?.value || '993', 10);
+    const email = document.getElementById('imapEmail')?.value.trim();
+    const pass = document.getElementById('imapPass')?.value.trim();
+    const notice = document.getElementById('emailSyncStatusNotice');
+    const saveBtn = document.getElementById('saveAndSyncEmailBtn');
+
+    if (!host || !email || !pass) {
+        showToast('Please fill in IMAP Host, Email, and App Password.');
+        return;
+    }
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span>⏳ Encrypting credentials & saving...</span>';
+    }
+
+    try {
+        const res = await fetch('/api/inbox/channels/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                imap_host: host,
+                imap_port: port,
+                email: email,
+                password: pass
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            if (notice) {
+                notice.style.display = 'block';
+                notice.style.background = '#ECFDF5';
+                notice.style.border = '1px solid #A7F3D0';
+                notice.style.color = '#065F46';
+                notice.innerHTML = '<strong>✓ Saved!</strong> Encrypted with AES-256-GCM. Running initial sync...';
+            }
+            showToast('✓ IMAP Credentials Encrypted and Saved!');
+
+            // Trigger immediate sync
+            const syncRes = await fetch('/api/inbox/email/sync', { method: 'POST' });
+            const syncData = await syncRes.json();
+            if (syncData.success) {
+                if (notice) notice.innerHTML = `<strong>✓ IMAP Synced!</strong> ${syncData.syncedCount || 0} prospect messages imported.`;
+                showToast(`✓ Initial sync retrieved ${syncData.syncedCount || 0} prospect emails.`);
+                loadInboxConversations();
+                fetchInboxStats();
+            } else {
+                if (notice) notice.innerHTML = `<strong>⚠️ Notice:</strong> ${escapeHtml(syncData.error || 'Check credentials')}`;
+            }
+        } else {
+            showToast('Save failed: ' + (data.error || 'Server error'));
+        }
+    } catch (err) {
+        showToast('Error saving IMAP channel: ' + err.message);
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<span>💾 Save & Test IMAP Sync</span>';
+        }
+    }
+};
+
+window.simulateInboundWhatsAppMessage = async function() {
+    const btn = document.getElementById('sendWaTestMsgBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/webhooks/whatsapp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Webhook-Secret': 'cb_wa_secret_2026'
+            },
+            body: JSON.stringify({
+                event: 'messages.upsert',
+                data: {
+                    from: '923001234567@s.whatsapp.net',
+                    pushName: 'Dr. Zafar Medical',
+                    text: 'Hello, saw your message regarding GMB optimization. What are your pricing plans?'
+                }
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast('✓ WhatsApp inbound simulated and verified!');
+            loadInboxConversations();
+            fetchInboxStats();
+        } else {
+            showToast('Simulation failed: ' + (data.error || 'Error'));
+        }
+    } catch (err) {
+        showToast('Error simulating WhatsApp: ' + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
+window.simulateInboundInstagramMessage = async function() {
+    const btn = document.getElementById('sendIgTestMsgBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+        const payload = {
+            object: 'instagram',
+            entry: [{
+                id: 'ig_test_page_1',
+                time: Date.now(),
+                messaging: [{
+                    sender: { id: 'ig_user_4499', username: 'lahore_dental_studio' },
+                    recipient: { id: 'ig_my_business' },
+                    timestamp: Date.now(),
+                    message: {
+                        mid: 'm_' + Math.random().toString(36).substring(7),
+                        text: 'Hey! Are you still offering dental practice lead generation in Lahore?'
+                    }
+                }]
+            }]
+        };
+
+        const res = await fetch('/api/webhooks/instagram', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Hub-Signature-256': 'sha256=simulation'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast('✓ Instagram DM simulated and recorded!');
+            loadInboxConversations();
+            fetchInboxStats();
+        } else {
+            showToast('Simulation error: ' + (data.error || 'Check signature'));
+        }
+    } catch (err) {
+        showToast('Error simulating Instagram: ' + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
+window.copyInputVal = function(elemId) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+    navigator.clipboard.writeText(el.value).then(() => {
+        showToast('Copied to clipboard: ' + el.value);
+    }).catch(err => {
+        showToast('Copy failed: ' + err.message);
+    });
+};
+
+// Bind keyboard shortcuts & search filter
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('inboxSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            renderInboxThreads();
+        });
+    }
+
+    const replyTextarea = document.getElementById('chatReplyInput');
+    if (replyTextarea) {
+        replyTextarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendActiveChatReply();
+            }
+        });
+    }
+});
 
 

@@ -6,6 +6,7 @@ const { LeadRepository, pool } = require('./modules/m1_storage/leadRepository');
 const { ingestGmbCsv } = require('./modules/m2_gmb_integration/gmbParser');
 const { executeLiveHunt } = require('./modules/m2_gmb_integration/liveHunter');
 const { LOCATIONS_DATA, ALL_COUNTRIES } = require('./modules/locations');
+const inboxRouter = require('./modules/inbox/inboxRouter');
 require('dotenv').config();
 
 const app = express();
@@ -14,6 +15,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/api', inboxRouter);
 
 // 1. Get Summary Stats
 app.get('/api/stats', async (req, res) => {

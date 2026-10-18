@@ -7,6 +7,8 @@
     "dotenv": "^18.0.6",
     "express": "^5.2.1",
     "google-sr": "^6.0.0",
+    "imapflow": "^2.5.2",
+    "mailparser": "^3.9.40",
     "nodemailer": "^10.1.1",
     "pg": "^8.23.1",
     "playwright": "^1.64.0"

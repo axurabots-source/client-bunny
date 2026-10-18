@@ -79,6 +79,13 @@
                 <span class="nav-text">Lists</span>
                 <span class="nav-count" id="sidebarListsCount">0</span>
             </button>
+            <button class="nav-item" data-screen="inbox" id="navInbox">
+                <svg class="nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span class="nav-text">Inbox</span>
+                <span class="nav-count" id="sidebarInboxCount" style="background: #2563EB; color: #FFF; display: none;">0</span>
+            </button>
             <button class="nav-item" data-screen="analytics" id="navAnalytics">
                 <svg class="nav-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="20" x2="18" y2="10"></line>
@@ -476,6 +483,111 @@
             </div>
         </div>
 
+        <!-- SCREEN 5: OMNICHANNEL UNIFIED INBOX -->
+        <div class="screen-view" id="screenInbox">
+            <div class="screen-container">
+                <section class="section-hero">
+                    <div class="hero-left">
+                        <h1 class="page-title">Omnichannel Inbox</h1>
+                        <p class="page-subtitle">Real-time 2-way conversation hub across Email (IMAP), WhatsApp, and Instagram.</p>
+                    </div>
+                    <div class="hero-right">
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-secondary" id="inboxSyncEmailBtn" onclick="triggerEmailSync(this)">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                <span>Sync Email (IMAP)</span>
+                            </button>
+                            <button type="button" class="btn btn-primary" id="openChannelsConfigBtn" onclick="openChannelsModal()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                <span>Connect Channels</span>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Unified Inbox Split View -->
+                <div class="inbox-container card-border">
+                    <!-- Left: Conversations List -->
+                    <aside class="inbox-list-pane" id="inboxListPane">
+                        <div class="inbox-list-header">
+                            <div class="inbox-search-box">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <input type="text" id="inboxSearchInput" placeholder="Search chats by name, phone, email...">
+                            </div>
+                            <div class="inbox-channel-tabs">
+                                <button type="button" class="inbox-tab-btn active" data-channel="all" onclick="filterInboxChannel('all', this)">All</button>
+                                <button type="button" class="inbox-tab-btn" data-channel="email" onclick="filterInboxChannel('email', this)">✉️ Email</button>
+                                <button type="button" class="inbox-tab-btn" data-channel="whatsapp" onclick="filterInboxChannel('whatsapp', this)">💬 WA</button>
+                                <button type="button" class="inbox-tab-btn" data-channel="instagram" onclick="filterInboxChannel('instagram', this)">📸 IG</button>
+                            </div>
+                        </div>
+
+                        <div class="inbox-threads-list" id="inboxThreadsList">
+                            <div class="table-loading">Loading conversations...</div>
+                        </div>
+                    </aside>
+
+                    <!-- Right: Active Chat Conversation Thread -->
+                    <main class="inbox-chat-pane" id="inboxChatPane">
+                        <!-- Empty State when nothing selected -->
+                        <div class="inbox-empty-view" id="inboxEmptyView">
+                            <div class="inbox-empty-graphic">💬</div>
+                            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 6px;">Select a conversation</h3>
+                            <p style="font-size: 13px; color: var(--text-secondary); max-width: 300px; text-align: center;">
+                                Choose a thread from the left or connect your channels to receive customer replies in real-time.
+                            </p>
+                        </div>
+
+                        <!-- Active Chat View (shown when thread clicked) -->
+                        <div class="inbox-active-chat" id="inboxActiveChat" style="display: none;">
+                            <div class="chat-header">
+                                <div class="chat-header-left">
+                                    <button type="button" class="btn-icon mobile-back-btn" id="mobileBackToChatsBtn" onclick="closeMobileChat()">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                                    </button>
+                                    <div class="chat-avatar" id="activeChatAvatar">?</div>
+                                    <div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <h3 class="chat-title" id="activeChatName">—</h3>
+                                            <span class="chat-channel-badge" id="activeChatChannelBadge">Email</span>
+                                        </div>
+                                        <span class="chat-meta" id="activeChatMeta">—</span>
+                                    </div>
+                                </div>
+                                <div class="chat-header-right">
+                                    <button type="button" class="btn btn-secondary btn-sm" id="viewLeadProfileFromChatBtn" onclick="openLeadProfileFromCurrentChat()">
+                                        <span>View Lead Dossier →</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Messages History Stream -->
+                            <div class="chat-messages-container" id="chatMessagesContainer">
+                                <!-- Messages injected dynamically -->
+                            </div>
+
+                            <!-- Reply Box & Quick Actions -->
+                            <div class="chat-reply-box">
+                                <div class="chat-reply-toolbar">
+                                    <span class="chat-channel-indicator" id="replyChannelIndicator">Replying via Email</span>
+                                    <button type="button" class="btn-ai-suggest" onclick="suggestAIReplyForCurrentChat()">
+                                        <span>✨ AI Suggest Reply</span>
+                                    </button>
+                                </div>
+                                <div class="chat-input-row">
+                                    <textarea id="chatReplyInput" class="form-input chat-textarea" rows="3" placeholder="Type your message reply... (Press Enter to send, Shift+Enter for new line)"></textarea>
+                                    <button type="button" class="btn btn-primary chat-send-btn" id="sendReplyBtn" onclick="sendActiveChatReply()">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                        <span>Send</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- Slide-over Lead Detail Drawer -->
@@ -701,6 +813,111 @@
         </div>
     </div>
 
+    <!-- ==========================================================
+         MODAL 4: OMNICHANNEL INTEGRATIONS & SECURITY
+         ========================================================== -->
+    <div class="modal-overlay" id="channelsModalOverlay" style="display: none;">
+        <div class="modal-card" style="max-width: 650px;">
+            <div class="modal-header">
+                <div>
+                    <span class="drawer-tag">COMMUNICATION INTEGRATIONS</span>
+                    <h3 class="modal-title">Connect Inbox Channels</h3>
+                </div>
+                <button class="close-btn" id="closeChannelsModalBtn" aria-label="Close Channels Modal" onclick="closeChannelsModal()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Channel Sub-Tabs -->
+                <div class="channel-tab-bar" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 10px;">
+                    <button type="button" class="channel-tab-btn active" id="tabChanEmail" onclick="switchChannelSettingsTab('email')">✉️ Email (IMAP Sync)</button>
+                    <button type="button" class="channel-tab-btn" id="tabChanWa" onclick="switchChannelSettingsTab('whatsapp')">💬 WhatsApp Gateway</button>
+                    <button type="button" class="channel-tab-btn" id="tabChanIg" onclick="switchChannelSettingsTab('instagram')">📸 Instagram / Meta</button>
+                </div>
+
+                <!-- TAB 1: EMAIL (IMAP SYNC) -->
+                <div class="channel-tab-content" id="chanTabEmail">
+                    <div style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E40AF; padding: 10px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 14px;">
+                        🛡️ <strong>Encrypted IMAP Sync:</strong> Incoming client emails are automatically matched to leads by email address and stored in the unified inbox. Passwords are encrypted with AES-256-GCM.
+                    </div>
+                    <div class="form-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div class="form-group">
+                            <label class="form-label" for="imapHost">IMAP Host</label>
+                            <input type="text" id="imapHost" class="form-input" value="imap.gmail.com" placeholder="imap.gmail.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="imapPort">IMAP Port</label>
+                            <input type="number" id="imapPort" class="form-input" value="993" placeholder="993">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" for="imapEmail">Your Email Address</label>
+                        <input type="email" id="imapEmail" class="form-input" placeholder="e.g. yourname@gmail.com">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label" for="imapPass">App Password (16 Letters)</label>
+                        <input type="password" id="imapPass" class="form-input" placeholder="Enter Gmail App Password">
+                    </div>
+                    <div id="emailSyncStatusNotice" style="display: none; padding: 10px; border-radius: 6px; font-size: 12px; margin-bottom: 14px;"></div>
+                    <button type="button" class="btn btn-primary" id="saveAndSyncEmailBtn" onclick="saveAndSyncEmailChannel()" style="width: 100%; justify-content: center;">
+                        <span>💾 Save & Test IMAP Sync</span>
+                    </button>
+                </div>
+
+                <!-- TAB 2: WHATSAPP GATEWAY -->
+                <div class="channel-tab-content" id="chanTabWa" style="display: none;">
+                    <div style="background: #F0FDF4; border: 1px solid #BBF7D0; color: #166534; padding: 10px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 14px;">
+                        💬 <strong>Free WhatsApp Inbound:</strong> Connect via Evolution API or self-hosted Baileys bridge. Inbound WhatsApp messages trigger webhooks protected with secret signatures.
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" for="waWebhookUrlDisplay">Your Inbound Webhook URL</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="waWebhookUrlDisplay" class="form-input" readonly value="https://YOUR_DOMAIN/api/webhooks/whatsapp" style="background: #FAFAFA; font-family: monospace; font-size: 12px;">
+                            <button type="button" class="btn btn-secondary" onclick="copyInputVal('waWebhookUrlDisplay')">Copy</button>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label" for="waSecretToken">Webhook Secret Token (Header: X-Webhook-Secret)</label>
+                        <input type="text" id="waSecretToken" class="form-input" value="cb_wa_secret_2026" readonly style="background: #FAFAFA; font-family: monospace;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">Simulation / Instant Test Message</label>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">Send a verified test payload to confirm incoming messages append to your Unified Inbox:</p>
+                        <button type="button" class="btn btn-secondary" id="sendWaTestMsgBtn" onclick="simulateInboundWhatsAppMessage()">
+                            <span>🧪 Simulate Incoming WhatsApp Message</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- TAB 3: INSTAGRAM / META -->
+                <div class="channel-tab-content" id="chanTabIg" style="display: none;">
+                    <div style="background: #FDF2F8; border: 1px solid #FBCFE8; color: #9D174D; padding: 10px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 14px;">
+                        📸 <strong>Meta Graph API Webhooks:</strong> Free Instagram DMs & Facebook Messenger integration. Handles Meta's verification challenge and HMAC-SHA256 signatures.
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" for="metaWebhookUrlDisplay">Meta Callback URL</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="metaWebhookUrlDisplay" class="form-input" readonly value="https://YOUR_DOMAIN/api/webhooks/instagram" style="background: #FAFAFA; font-family: monospace; font-size: 12px;">
+                            <button type="button" class="btn btn-secondary" onclick="copyInputVal('metaWebhookUrlDisplay')">Copy</button>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label" for="metaVerifyTokenDisplay">Meta Verify Token</label>
+                        <input type="text" id="metaVerifyTokenDisplay" class="form-input" value="client_bunny_meta_verify_2026" readonly style="background: #FAFAFA; font-family: monospace;">
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn btn-secondary" id="sendIgTestMsgBtn" onclick="simulateInboundInstagramMessage()">
+                            <span>🧪 Simulate Incoming Instagram DM</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions" style="border-top: 1px solid var(--border-light); padding: 14px 20px; display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeChannelsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MOBILE BOTTOM NAVIGATION (THUMB-FRIENDLY PWA DOCK FOR <= 768PX) -->
     <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Mobile Navigation">
         <button type="button" class="bnav-item active" data-screen="leads" id="bnavLeads" aria-label="Leads Pipeline">
@@ -731,6 +948,13 @@
             </svg>
             <span class="bnav-text">Lists</span>
             <span class="bnav-badge" id="bnavListsCount">0</span>
+        </button>
+        <button type="button" class="bnav-item" data-screen="inbox" id="bnavInbox" aria-label="Omnichannel Inbox">
+            <svg class="bnav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span class="bnav-text">Inbox</span>
+            <span class="bnav-badge" id="bnavInboxCount" style="background: #2563EB; display: none;">0</span>
         </button>
         <button type="button" class="bnav-item" data-screen="analytics" id="bnavAnalytics" aria-label="Analytics">
             <svg class="bnav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
