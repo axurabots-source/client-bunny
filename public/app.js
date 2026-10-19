@@ -2181,7 +2181,7 @@ function renderInboxThreads() {
         const unreadBadge = (c.unread_count > 0) ? `<span class="thread-unread-badge">${c.unread_count}</span>` : '';
 
         return `
-            <div class="thread-item ${isActive ? 'active' : ''} ${c.unread_count > 0 ? 'unread' : ''}" onclick="openConversation(${c.id})">
+            <div class="thread-item ${isActive ? 'active' : ''} ${c.unread_count > 0 ? 'unread' : ''}" onclick="openConversation('${c.id}')">
                 <div class="thread-item-header">
                     <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
                         <span class="thread-channel-icon" title="${c.channel}">${icon}</span>
@@ -2334,8 +2334,13 @@ window.closeMobileChat = function() {
 window.filterInboxChannel = function(channel, btn) {
     currentInboxChannelFilter = channel;
 
-    document.querySelectorAll('.inbox-tab-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
+    document.querySelectorAll('.inbox-tab-btn').forEach(b => {
+        if (b.getAttribute('data-channel') === channel) {
+            b.classList.add('active');
+        } else {
+            b.classList.remove('active');
+        }
+    });
 
     loadInboxConversations();
 };
@@ -2469,7 +2474,11 @@ window.triggerEmailSync = async function(btn) {
             loadInboxConversations();
             fetchInboxStats();
         } else {
-            showToast('Email sync failed: ' + (data.error || 'Check IMAP settings'));
+            const errStr = data.error || 'Check IMAP settings';
+            showToast('Email sync notice: ' + errStr);
+            if (errStr.toLowerCase().includes('not configured')) {
+                openChannelsModal();
+            }
         }
     } catch (err) {
         showToast('Sync network error: ' + err.message);
@@ -2499,7 +2508,7 @@ window.openChannelsModal = async function() {
     modal.style.display = 'flex';
 
     // Switch to first tab by default
-    switchChannelTab('email');
+    switchChannelSettingsTab('email');
 
     // Pre-fill existing channel settings from server
     try {
@@ -2509,7 +2518,9 @@ window.openChannelsModal = async function() {
             const emailCfg = data.channels.email.config || {};
             if (emailCfg.imap_host) document.getElementById('imapHost').value = emailCfg.imap_host;
             if (emailCfg.imap_port) document.getElementById('imapPort').value = emailCfg.imap_port;
-            if (emailCfg.email) document.getElementById('imapEmail').value = emailCfg.email;
+            if (emailCfg.email || data.channels.email.emailAddress) {
+                document.getElementById('imapEmail').value = emailCfg.email || data.channels.email.emailAddress;
+            }
         }
     } catch (err) {
         console.warn('Could not fetch channel settings:', err.message);
@@ -2521,15 +2532,39 @@ window.closeChannelsModal = function() {
     if (modal) modal.style.display = 'none';
 };
 
-window.switchChannelTab = function(tabName, btn) {
-    const tabs = ['email', 'wa', 'ig'];
-    tabs.forEach(t => {
-        const tabEl = document.getElementById('chanTab' + t.charAt(0).toUpperCase() + t.slice(1));
-        if (tabEl) tabEl.style.display = (t === tabName.toLowerCase() || (t === 'wa' && tabName === 'whatsapp') || (t === 'ig' && tabName === 'instagram')) ? 'block' : 'none';
-    });
+// Robust Tab Switcher for Channels Modal
+window.switchChannelSettingsTab = window.switchChannelTab = function(tabName, btn) {
+    const norm = (tabName || '').toLowerCase();
+    const isEmail = norm.includes('email');
+    const isWa = norm.includes('wa') || norm.includes('whats');
+    const isIg = norm.includes('ig') || norm.includes('insta') || norm.includes('meta');
 
-    document.querySelectorAll('.channel-nav-tab').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
+    // 1. Toggle Tab Panes
+    const emailPane = document.getElementById('chanTabEmail');
+    const waPane = document.getElementById('chanTabWa');
+    const igPane = document.getElementById('chanTabIg');
+
+    if (emailPane) emailPane.style.display = isEmail ? 'block' : 'none';
+    if (waPane) waPane.style.display = isWa ? 'block' : 'none';
+    if (igPane) igPane.style.display = isIg ? 'block' : 'none';
+
+    // 2. Toggle Active Tab Buttons
+    document.querySelectorAll('.channel-tab-btn, .channel-nav-tab').forEach(b => b.classList.remove('active'));
+
+    const targetBtn = btn || 
+        (isEmail ? document.getElementById('tabChanEmail') : 
+         isWa ? document.getElementById('tabChanWa') : 
+         isIg ? document.getElementById('tabChanIg') : null);
+
+    if (targetBtn) targetBtn.classList.add('active');
+
+    // 3. Auto-populate current origin for Webhook URLs
+    const origin = window.location.origin;
+    const waUrlInput = document.getElementById('waWebhookUrlDisplay');
+    const igUrlInput = document.getElementById('metaWebhookUrlDisplay');
+
+    if (waUrlInput) waUrlInput.value = `${origin}/api/webhooks/whatsapp`;
+    if (igUrlInput) igUrlInput.value = `${origin}/api/webhooks/instagram`;
 };
 
 window.saveAndSyncEmailChannel = async function() {
@@ -2664,13 +2699,13 @@ window.simulateInboundInstagramMessage = async function() {
             body: JSON.stringify(payload)
         });
 
-        const data = await res.json();
-        if (data.success) {
+        const text = await res.text();
+        if (res.ok && (text.includes('EVENT_RECEIVED') || text.includes('success'))) {
             showToast('✓ Instagram DM simulated and recorded!');
             loadInboxConversations();
             fetchInboxStats();
         } else {
-            showToast('Simulation error: ' + (data.error || 'Check signature'));
+            showToast('Simulation error: ' + text);
         }
     } catch (err) {
         showToast('Error simulating Instagram: ' + err.message);
@@ -2682,12 +2717,26 @@ window.simulateInboundInstagramMessage = async function() {
 window.copyInputVal = function(elemId) {
     const el = document.getElementById(elemId);
     if (!el) return;
-    navigator.clipboard.writeText(el.value).then(() => {
-        showToast('Copied to clipboard: ' + el.value);
-    }).catch(err => {
-        showToast('Copy failed: ' + err.message);
-    });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.value).then(() => {
+            showToast('Copied to clipboard: ' + el.value);
+        }).catch(() => {
+            fallbackCopy(el);
+        });
+    } else {
+        fallbackCopy(el);
+    }
 };
+
+function fallbackCopy(el) {
+    try {
+        el.select();
+        document.execCommand('copy');
+        showToast('Copied to clipboard: ' + el.value);
+    } catch (err) {
+        showToast('Manual copy needed');
+    }
+}
 
 // Bind keyboard shortcuts & search filter
 document.addEventListener('DOMContentLoaded', () => {
@@ -2705,6 +2754,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.preventDefault();
                 sendActiveChatReply();
             }
+        });
+    }
+
+    // Close channels modal on backdrop click
+    const channelsOverlay = document.getElementById('channelsModalOverlay');
+    if (channelsOverlay) {
+        channelsOverlay.addEventListener('click', (e) => {
+            if (e.target === channelsOverlay) closeChannelsModal();
         });
     }
 });
