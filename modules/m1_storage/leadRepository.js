@@ -12,6 +12,11 @@ const pool = new Pool({
     idleTimeoutMillis: 30000
 });
 
+// Prevent unhandled errors on idle clients from crashing the server
+pool.on('error', (err) => {
+    console.warn('[PostgreSQL Pool] Connection blip or idle client dropped (will reconnect on next query):', err.message);
+});
+
 class LeadRepository {
     /**
      * Upsert a lead record. If place_id matches, updates ratings, website, and pain points.

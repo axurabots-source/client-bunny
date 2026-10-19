@@ -472,6 +472,15 @@ app.use((req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Process-level Crash Guardians
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[Server] Intercepted Unhandled Rejection:', reason && reason.message ? reason.message : reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('[Server] Intercepted Uncaught Exception:', err.message);
+});
+
 if (require.main === module) {
     const server = app.listen(PORT, () => {
         console.log(`=================================================`);
