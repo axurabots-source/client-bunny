@@ -1,0 +1,131 @@
+{
+  "project_name": "Client Bunny",
+  "workspace_path": "d:\\Client Bunny",
+  "last_updated": "2026-10-23T14:18:00+05:00",
+  "status": "Active Development",
+  "core_architecture": {
+    "backend": {
+      "runtime": "Node.js (v20+)",
+      "framework": "Express.js",
+      "server_entry": "server.js",
+      "port": 3000,
+      "routes": {
+        "inbox": "/api/inbox",
+        "whatsapp_webhook": "/api/webhooks/whatsapp",
+        "manychat_webhook": "/api/webhooks/manychat",
+        "instagram_webhook": "/api/webhooks/instagram",
+        "leads": "/api/leads",
+        "enrichment": "/api/enrich",
+        "pitch": "/api/pitch"
+      }
+    },
+    "database": {
+      "provider": "Supabase PostgreSQL",
+      "client": "pg (node-postgres Pool)",
+      "schema_file": "schema_supabase.sql",
+      "migration_script": "migrate_supabase.js",
+      "tables": [
+        "leads",
+        "inbox_conversations",
+        "inbox_messages",
+        "channel_configs"
+      ]
+    },
+    "frontend": {
+      "stack": "Vanilla HTML5 / Modern CSS / Vanilla JavaScript (No Framework bloat)",
+      "directory": "public/",
+      "pages": {
+        "index": "public/index.html",
+        "style": "public/style.css",
+        "logic": "public/app.js"
+      },
+      "capabilities": [
+        "Standalone PWA (manifest.json, sw.js)",
+        "Fully Mobile Responsive (iOS, Android, Tablet)",
+        "Zero horizontal scroll / lockable viewports",
+        "Rich UI aesthetic: Dark obsidian + emerald accents"
+      ]
+    },
+    "communication_channels": {
+      "whatsapp": {
+        "engine": "@whiskeysockets/baileys (Native WhatsApp Web Socket)",
+        "manager": "modules/inbox/baileysManager.js",
+        "auth_state": "auth_whatsapp/",
+        "connection_mode": "Live QR Code Scan from WhatsApp Mobile App (Linked Devices)",
+        "active_number": "+92 329 1866966",
+        "features": [
+          "Auto-QR generation in UI",
+          "Real-time bidirectional message sync",
+          "Media and image rendering",
+          "Full history sync"
+        ]
+      },
+      "meta_instagram": {
+        "mode": "ManyChat Free Automation Bridge (No Meta Developer App needed)",
+        "receiver": "modules/inbox/metaReceiver.js",
+        "webhook_endpoint": "/api/webhooks/manychat",
+        "features": ["Incoming DM streaming", "Instant test simulation"]
+      },
+      "email": {
+        "incoming": "imapflow + mailparser (IMAP Sync)",
+        "outgoing": "nodemailer (SMTP)",
+        "security": "AES-256-GCM CryptoVault (cryptoVault.js)"
+      }
+    },
+    "ai_engine": {
+      "provider": "Google Gemini API (gemini-1.5-flash / gemini-2.5-flash)",
+      "features": [
+        "Personalized 3-step Cold Email Pitch generator",
+        "One-click Lead Pain Points analysis",
+        "Omnichannel AI Suggest Reply in chat composer"
+      ]
+    }
+  },
+  "completed_milestones": [
+    {
+      "milestone": "Module 1-5: Google Maps Scraper & Lead Harvester",
+      "description": "High-volume scraper for local business data with phone, email, website, ratings and social links."
+    },
+    {
+      "milestone": "Module 6 & 7: AI Pitch Generator & Lead Hunter Dashboard",
+      "description": "Interactive lead dossier, one-click enrichment, Gemini cold pitch drafting, quick filters."
+    },
+    {
+      "milestone": "Module 8: Supabase PostgreSQL Cloud Sync",
+      "description": "Centralized database migration script with live connection pooling."
+    },
+    {
+      "milestone": "Module 9: Mobile Responsive & PWA Conversion",
+      "description": "PWA icons, service worker cache, responsive layout for all mobile viewports."
+    },
+    {
+      "milestone": "Module 10: Omnichannel Unified Inbox (WhatsApp Web PC Style)",
+      "description": "Full WhatsApp Web clone UI with doodle texture, green bubbles, double blue checkmarks, auto-growing textarea (40px-140px), direct image preview cards with lightbox zoom, clickable links, and independent dual-pane scroll."
+    },
+    {
+      "milestone": "Module 11: Native WhatsApp QR Scanner & ManyChat Instagram Bridge",
+      "description": "Integrated Baileys engine for mobile QR scan without third-party fees, plus ManyChat bridge for zero-developer Instagram DMs."
+    },
+    {
+      "milestone": "Module 12: WhatsApp Mobile Native UX (Mobile Viewport)",
+      "description": "Separate mobile flow where full-width scrollable chats list is shown first; tapping opens full-screen WhatsApp chat view with back button (←), contact avatar, status, doodle wallpaper, and bottom-anchored composer. Browser back / hardware back button smoothly returns to chats list."
+    }
+  ],
+  "current_checkpoint": "WhatsApp Mobile Native UX implemented and tested with live server (Port 3000 running). Mobile dual-screen navigation and desktop dual-pane layouts are both active.",
+  "next_immediate_steps": [
+    "Run server on port 3000 (npm run dev) and verify Baileys connection state.",
+    "Test outbound WhatsApp message sending directly from the chat composer input.",
+    "Stage and commit all recent updates to git repository (axurabots-source/client-bunny)."
+  ],
+  "key_files": {
+    "server": "server.js",
+    "frontend_html": "public/index.html",
+    "frontend_css": "public/style.css",
+    "frontend_js": "public/app.js",
+    "baileys_whatsapp": "modules/inbox/baileysManager.js",
+    "inbox_router": "modules/inbox/inboxRouter.js",
+    "inbox_repo": "modules/inbox/inboxRepository.js",
+    "meta_receiver": "modules/inbox/metaReceiver.js",
+    "db_schema": "schema_supabase.sql"
+  }
+}

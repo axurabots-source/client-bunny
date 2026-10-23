@@ -1,5 +1,12 @@
 {
+  "name": "client-bunny",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
   "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "axios": "^1.20.0",
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",
@@ -11,6 +18,7 @@
     "mailparser": "^3.9.40",
     "nodemailer": "^10.1.1",
     "pg": "^8.23.1",
-    "playwright": "^1.64.0"
+    "playwright": "^1.64.0",
+    "qrcode": "^1.5.4"
   }
 }

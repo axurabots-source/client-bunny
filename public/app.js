@@ -282,27 +282,39 @@ function switchScreen(screenName) {
     // Hide all screens, show target
     document.querySelectorAll('.screen-view').forEach(s => s.classList.remove('active'));
 
-    if (screenName === 'leads') {
-        screenLeads.classList.add('active');
-        breadcrumbTitle.textContent = 'Leads';
-        fetchLeads();
-    } else if (screenName === 'hunt') {
-        screenHunt.classList.add('active');
-        breadcrumbTitle.textContent = 'Hunt Launchpad';
-        fetchJobs();
-    } else if (screenName === 'lists') {
-        screenLists.classList.add('active');
-        breadcrumbTitle.textContent = 'Lead Lists';
-        renderLists();
-    } else if (screenName === 'inbox') {
+    if (screenName === 'inbox') {
+        document.body.classList.add('inbox-mode');
         screenInbox.classList.add('active');
         breadcrumbTitle.textContent = 'Omnichannel Inbox';
+
+        // WhatsApp Mobile: always start on the chats list view on mobile screens
+        if (window.innerWidth <= 768) {
+            document.body.classList.remove('mobile-inbox-open');
+            activeConversationId = null;
+        }
+
         loadInboxConversations();
         fetchInboxStats();
-    } else if (screenName === 'analytics') {
-        screenAnalytics.classList.add('active');
-        breadcrumbTitle.textContent = 'Analytics';
-        renderAnalytics();
+    } else {
+        document.body.classList.remove('inbox-mode');
+        document.body.classList.remove('mobile-inbox-open');
+        if (screenName === 'leads') {
+            screenLeads.classList.add('active');
+            breadcrumbTitle.textContent = 'Leads';
+            fetchLeads();
+        } else if (screenName === 'hunt') {
+            screenHunt.classList.add('active');
+            breadcrumbTitle.textContent = 'Hunt Launchpad';
+            fetchJobs();
+        } else if (screenName === 'lists') {
+            screenLists.classList.add('active');
+            breadcrumbTitle.textContent = 'Lead Lists';
+            renderLists();
+        } else if (screenName === 'analytics') {
+            screenAnalytics.classList.add('active');
+            breadcrumbTitle.textContent = 'Analytics';
+            renderAnalytics();
+        }
     }
 }
 
@@ -2105,7 +2117,9 @@ window.fetchInboxStats = async function() {
     }
 };
 
-// Load conversations list
+// Load conversations list with scroll preservation & change detection
+let lastThreadsHash = '';
+
 window.loadInboxConversations = async function(silent = false) {
     const listEl = document.getElementById('inboxThreadsList');
     if (!listEl) return;
@@ -2121,27 +2135,46 @@ window.loadInboxConversations = async function(silent = false) {
 
         if (data.success) {
             allInboxConversations = data.conversations || [];
-            renderInboxThreads();
+            
+            // Check if thread data changed
+            const currentHash = allInboxConversations.map(c => `${c.id}:${c.last_message_at}:${c.unread_count}`).join('|');
+            if (silent && currentHash === lastThreadsHash) {
+                return; // Content unchanged, avoid DOM rewrite and scroll reset
+            }
+            lastThreadsHash = currentHash;
+            renderInboxThreads(silent);
         } else {
-            listEl.innerHTML = `<div style="padding: 20px; font-size: 13px; color: #DC2626; text-align: center;">Error loading chats: ${escapeHtml(data.error || 'Server error')}</div>`;
+            if (!silent) listEl.innerHTML = `<div style="padding: 20px; font-size: 13px; color: #DC2626; text-align: center;">Error loading chats: ${escapeHtml(data.error || 'Server error')}</div>`;
         }
     } catch (err) {
-        listEl.innerHTML = `<div style="padding: 20px; font-size: 13px; color: #DC2626; text-align: center;">Network error: ${escapeHtml(err.message)}</div>`;
+        if (!silent) listEl.innerHTML = `<div style="padding: 20px; font-size: 13px; color: #DC2626; text-align: center;">Network error: ${escapeHtml(err.message)}</div>`;
     }
 };
 
-// Render conversations list with search filtering
-function renderInboxThreads() {
+// Helper: Extract 2-letter uppercase initials from name
+function getInboxInitials(str) {
+    if (!str) return '?';
+    const clean = str.replace(/[+@#\-_.]/g, ' ').trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return clean.substring(0, 2).toUpperCase() || '?';
+}
+
+// Render conversations list with search filtering and preserved scroll
+function renderInboxThreads(preserveScroll = false) {
     const listEl = document.getElementById('inboxThreadsList');
     if (!listEl) return;
 
+    const savedScrollTop = preserveScroll ? listEl.scrollTop : 0;
     const searchVal = (document.getElementById('inboxSearchInput')?.value || '').trim().toLowerCase();
 
     let filtered = allInboxConversations;
     if (searchVal) {
         filtered = filtered.filter(c => {
-            const name = (c.participant_name || '').toLowerCase();
-            const contact = (c.participant_contact || '').toLowerCase();
+            const name = (c.contact_name || c.participant_name || '').toLowerCase();
+            const contact = (c.contact_identifier || c.participant_contact || '').toLowerCase();
             const title = (c.lead_title || '').toLowerCase();
             const lastMsg = (c.last_message_preview || '').toLowerCase();
             return name.includes(searchVal) || contact.includes(searchVal) || title.includes(searchVal) || lastMsg.includes(searchVal);
@@ -2150,13 +2183,14 @@ function renderInboxThreads() {
 
     if (filtered.length === 0) {
         listEl.innerHTML = `
-            <div style="padding: 32px 16px; text-align: center; color: var(--text-muted);">
-                <div style="font-size: 24px; margin-bottom: 8px;">📬</div>
-                <div style="font-weight: 600; font-size: 13px; color: var(--text-primary); margin-bottom: 4px;">No conversations yet</div>
-                <p style="font-size: 12px; line-height: 1.4; margin: 0 auto; max-width: 200px;">
-                    Connect your channels or run email sync to receive prospect responses.
+            <div style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
+                <div style="font-size: 32px; margin-bottom: 10px;">📬</div>
+                <div style="font-weight: 700; font-size: 14px; color: var(--text-primary); margin-bottom: 4px;">No conversations found</div>
+                <p style="font-size: 12px; line-height: 1.5; margin: 0 auto; max-width: 220px; color: var(--text-secondary);">
+                    ${searchVal ? 'No messages match your search filter.' : 'Incoming messages from WhatsApp, Instagram, and Email will appear here in real time.'}
                 </p>
-                <button type="button" class="btn btn-secondary btn-sm" onclick="openChannelsModal()" style="margin-top: 12px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="openChannelsModal()" style="margin-top: 14px; gap: 6px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                     <span>Connect Channels</span>
                 </button>
             </div>
@@ -2164,53 +2198,75 @@ function renderInboxThreads() {
         return;
     }
 
-    const channelIcons = {
-        email: '✉️',
-        whatsapp: '💬',
-        instagram: '📸'
-    };
-
     listEl.innerHTML = filtered.map(c => {
         const isActive = c.id === activeConversationId;
-        const icon = channelIcons[c.channel] || '💬';
+        const channel = (c.channel || 'whatsapp').toLowerCase();
+        const avatarClass = channel === 'whatsapp' ? 'avatar-whatsapp' : channel === 'instagram' ? 'avatar-instagram' : 'avatar-email';
+        const dotClass = channel === 'whatsapp' ? 'dot-whatsapp' : channel === 'instagram' ? 'dot-instagram' : 'dot-email';
+        const dotIcon = channel === 'whatsapp' ? '💬' : channel === 'instagram' ? '📸' : '✉️';
+
         const displayName = escapeHtml(c.contact_name || c.participant_name || c.contact_identifier || c.participant_contact || 'Prospect');
         const contactSub = escapeHtml(c.contact_identifier || c.participant_contact || '');
-        const leadTag = c.lead_title ? `<span style="font-size: 10px; background: #EEF2FF; color: #4338CA; padding: 1px 6px; border-radius: 3px; font-weight: 500; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(c.lead_title)}</span>` : '';
+        const initials = getInboxInitials(displayName);
+
+        const leadTag = c.lead_title ? `<span class="thread-lead-badge" title="${escapeHtml(c.lead_title)}">${escapeHtml(c.lead_title)}</span>` : '';
         const preview = escapeHtml(c.last_message_preview || 'No messages');
         const timeAgo = c.last_message_at ? formatTimeAgo(new Date(c.last_message_at)) : '';
-        const unreadBadge = (c.unread_count > 0) ? `<span class="thread-unread-badge">${c.unread_count}</span>` : '';
+        const unreadPill = (c.unread_count > 0) ? `<span class="thread-unread-pill">${c.unread_count}</span>` : '';
 
         return `
             <div class="thread-item ${isActive ? 'active' : ''} ${c.unread_count > 0 ? 'unread' : ''}" onclick="openConversation('${c.id}')">
-                <div class="thread-item-header">
-                    <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
-                        <span class="thread-channel-icon" title="${c.channel}">${icon}</span>
+                <div class="thread-avatar ${avatarClass}">
+                    ${initials}
+                    <div class="thread-channel-dot ${dotClass}" title="${channel.toUpperCase()}">${dotIcon}</div>
+                </div>
+                <div class="thread-body">
+                    <div class="thread-top">
                         <strong class="thread-name">${displayName}</strong>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span class="thread-time">${timeAgo}</span>
+                            <button type="button" class="thread-delete-btn" title="Delete conversation" onclick="deleteConversationById('${c.id}', event)">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                        </div>
                     </div>
-                    <span class="thread-time">${timeAgo}</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 6px; margin: 2px 0 4px 0;">
-                    ${leadTag}
-                    <span style="font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contactSub}</span>
-                </div>
-                <div class="thread-preview-row">
-                    <span class="thread-preview-text">${preview}</span>
-                    ${unreadBadge}
+                    <div class="thread-sub-row">
+                        ${leadTag}
+                        <span class="thread-contact-sub">${contactSub}</span>
+                    </div>
+                    <div class="thread-preview-row">
+                        <span class="thread-preview">${preview}</span>
+                        ${unreadPill}
+                    </div>
                 </div>
             </div>
         `;
     }).join('');
+
+    if (preserveScroll && savedScrollTop > 0) {
+        listEl.scrollTop = savedScrollTop;
+    }
+
+    // Auto-select first thread on desktop if none selected
+    if (!activeConversationId && filtered.length > 0 && window.innerWidth > 768) {
+        openConversation(filtered[0].id, false);
+    }
 }
 
 // Open and select conversation thread
-window.openConversation = async function(id) {
+window.openConversation = async function(id, silent = false) {
     activeConversationId = id;
 
     // Toggle active thread styling
-    renderInboxThreads();
+    renderInboxThreads(true);
 
-    // Responsive: switch to chat view on mobile screens
-    document.body.classList.add('mobile-inbox-open');
+    // Responsive: switch to chat view on mobile screens with history push
+    if (window.innerWidth <= 768) {
+        document.body.classList.add('mobile-inbox-open');
+        try {
+            history.pushState({ inMobileChat: true, conversationId: id }, '');
+        } catch (e) {}
+    }
 
     const emptyView = document.getElementById('inboxEmptyView');
     const activeView = document.getElementById('inboxActiveChat');
@@ -2219,8 +2275,8 @@ window.openConversation = async function(id) {
     if (emptyView) emptyView.style.display = 'none';
     if (activeView) activeView.style.display = 'flex';
 
-    if (msgContainer) {
-        msgContainer.innerHTML = '<div class="table-loading" style="padding: 24px; text-align: center; color: var(--text-muted);">Loading message stream...</div>';
+    if (!silent && msgContainer && (!msgContainer.children.length || msgContainer.querySelector('.table-loading'))) {
+        msgContainer.innerHTML = '<div class="table-loading" style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 13px;">Loading message stream...</div>';
     }
 
     try {
@@ -2228,7 +2284,7 @@ window.openConversation = async function(id) {
         const data = await res.json();
 
         if (!data.success || !data.conversation) {
-            showToast('Failed to load conversation: ' + (data.error || 'Not found'));
+            if (!silent) showToast('Failed to load conversation: ' + (data.error || 'Not found'));
             return;
         }
 
@@ -2248,21 +2304,29 @@ window.openConversation = async function(id) {
 
         const contactTitle = conv.contact_name || conv.participant_name || conv.contact_identifier || conv.participant_contact || 'Prospect';
         const contactIdentifier = conv.contact_identifier || conv.participant_contact || '';
-        const initial = contactTitle.charAt(0).toUpperCase();
+        const initials = getInboxInitials(contactTitle);
 
-        if (avatarEl) avatarEl.textContent = initial;
+        const channel = (conv.channel || 'whatsapp').toLowerCase();
+        const avatarClass = channel === 'whatsapp' ? 'avatar-whatsapp' : channel === 'instagram' ? 'avatar-instagram' : 'avatar-email';
+        const chIcon = channel === 'whatsapp' ? '💬' : channel === 'instagram' ? '📸' : '✉️';
+
+        if (avatarEl) {
+            avatarEl.className = `chat-avatar ${avatarClass}`;
+            avatarEl.textContent = initials;
+        }
         if (nameEl) nameEl.textContent = contactTitle;
 
         if (channelBadge) {
-            channelBadge.className = `chat-channel-badge ${conv.channel}`;
-            channelBadge.textContent = conv.channel.toUpperCase();
+            channelBadge.className = `chat-channel-badge ${channel}`;
+            channelBadge.textContent = `${chIcon} ${channel.toUpperCase()}`;
         }
 
         if (metaEl) {
-            let metaText = contactIdentifier;
-            if (conv.lead_title) metaText += ` • ${conv.lead_title}`;
-            if (conv.lead_city) metaText += ` (${conv.lead_city})`;
-            metaEl.textContent = metaText;
+            let metaParts = [];
+            if (contactIdentifier) metaParts.push(contactIdentifier);
+            if (conv.lead_title) metaParts.push(conv.lead_title);
+            if (conv.lead_city) metaParts.push(conv.lead_city);
+            metaEl.textContent = metaParts.join(' • ') || 'Direct conversation';
         }
 
         if (leadBtn) {
@@ -2270,65 +2334,305 @@ window.openConversation = async function(id) {
         }
 
         if (replyIndicator) {
-            replyIndicator.textContent = `Replying via ${conv.channel.toUpperCase()} (${contactIdentifier})`;
+            replyIndicator.innerHTML = `${chIcon} Replying via <strong>${channel.toUpperCase()}</strong> (${escapeHtml(contactIdentifier)})`;
         }
 
-        // Render Messages History
-        renderChatMessages(messages, conv);
+        // Render Messages History (force scroll to bottom on fresh manual open)
+        renderChatMessages(messages, conv, !silent);
+
+        // Mark read on server
+        fetch(`/api/inbox/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
 
         // Refresh stats badge
         fetchInboxStats();
 
+        // Focus & auto-size composer textarea
+        if (!silent) {
+            const chatInput = document.getElementById('chatReplyInput');
+            if (chatInput) {
+                setTimeout(() => {
+                    chatInput.focus();
+                    if (window.autoResizeChatInput) window.autoResizeChatInput(chatInput);
+                }, 50);
+            }
+        }
+
     } catch (err) {
-        showToast('Error loading conversation: ' + err.message);
+        if (!silent) showToast('Error loading conversation: ' + err.message);
     }
 };
 
-// Render message bubbles in chat stream
-function renderChatMessages(messages, conv) {
+// Media attachment & Lightbox state
+let activeChatAttachment = null;
+
+// Lightbox modal controls
+window.openChatImageLightbox = function(url) {
+    const overlay = document.getElementById('imageLightbox');
+    const img = document.getElementById('lightboxImg');
+    const downloadBtn = document.getElementById('lightboxDownloadBtn');
+    if (!overlay || !img) return;
+
+    img.src = url;
+    if (downloadBtn) {
+        downloadBtn.href = url;
+        downloadBtn.setAttribute('download', url.split('/').pop() || 'photo.jpg');
+    }
+    overlay.style.display = 'flex';
+};
+
+window.closeChatImageLightbox = function(e) {
+    const overlay = document.getElementById('imageLightbox');
+    if (overlay) overlay.style.display = 'none';
+};
+
+// File Attachment Handler (Photos & Documents)
+window.handleChatFileUpload = function(input) {
+    if (!input || !input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        const base64 = e.target.result;
+        activeChatAttachment = {
+            filename: file.name,
+            base64: base64,
+            isImage: file.type.startsWith('image/')
+        };
+
+        const previewContainer = document.getElementById('chatAttachPreview');
+        const previewImg = document.getElementById('chatAttachPreviewImg');
+        const previewName = document.getElementById('chatAttachName');
+
+        if (previewContainer && previewImg && previewName) {
+            previewName.textContent = file.name;
+            if (activeChatAttachment.isImage) {
+                previewImg.src = base64;
+                previewImg.style.display = 'block';
+            } else {
+                previewImg.style.display = 'none';
+            }
+            previewContainer.style.display = 'flex';
+        }
+    };
+    reader.readAsDataURL(file);
+};
+
+window.removeChatAttachment = function() {
+    activeChatAttachment = null;
+    const previewContainer = document.getElementById('chatAttachPreview');
+    const input = document.getElementById('chatFileInput');
+    if (previewContainer) previewContainer.style.display = 'none';
+    if (input) input.value = '';
+};
+
+// Rich Message Formatter: Converts URLs, Markdown links, Images, and Photos into interactive elements
+window.formatChatMessageBody = function(raw) {
+    if (!raw) return '';
+    let text = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    
+    // 1. Markdown images: ![alt](url)
+    text = text.replace(/!\[([^\]]*)\]\(((?:https?:\/\/|\/uploads\/)[^\s\)]+)\)/gi, (m, alt, url) => {
+        return `<div class="chat-media-card"><img src="${url}" alt="${alt || 'Photo'}" class="chat-bubble-img" onclick="openChatImageLightbox('${url}')" loading="lazy" /><span class="chat-img-zoom-hint">🔍 Click to zoom</span></div>`;
+    });
+
+    // 2. Direct bracket image URLs e.g. [https://.../photo.png]
+    text = text.replace(/\[(https?:\/\/[^\s\]]+\.(?:png|jpg|jpeg|webp|gif)(?:\?[^\s\]]*)?)\]/gi, (m, url) => {
+        if (/p\.gif|tracking|\/o\//i.test(url)) {
+            return ''; // Hide 1x1 tracking pixel
+        }
+        return `<div class="chat-media-card"><img src="${url}" alt="Photo" class="chat-bubble-img" onclick="openChatImageLightbox('${url}')" loading="lazy" /><span class="chat-img-zoom-hint">🔍 Click to zoom</span></div>`;
+    });
+
+    // 3. Email image references like [image: Google]
+    text = text.replace(/\[image:\s*([^\]]+)\]/gi, (m, name) => {
+        return `<span class="chat-image-ref-badge">🖼️ <strong>${name}</strong></span>`;
+    });
+
+    // 4. Markdown links: [Title](url)
+    text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi, (m, title, url) => {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-link">${title} ↗</a>`;
+    });
+
+    // 5. Bracketed URLs: [https://...]
+    text = text.replace(/\[(https?:\/\/[^\s\]]+)\]/gi, (m, url) => {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-link">${url} ↗</a>`;
+    });
+
+    // 6. Google angle-bracket URLs: &lt;https://...&gt;
+    text = text.replace(/&lt;(https?:\/\/(?:(?!&gt;)[\S])+?)&gt;/gi, (m, url) => {
+        const cleanHref = url.replace(/&amp;/g, '&');
+        return `<a href="${cleanHref}" target="_blank" rel="noopener noreferrer" class="chat-link">${url} ↗</a>`;
+    });
+
+    // 7. Direct standalone image URLs ending with image extensions (not inside HTML tags)
+    text = text.replace(/(^|\s)(https?:\/\/[^\s<>"'\)]+\.(?:png|jpg|jpeg|webp|gif)(?:\?[^\s<>"'\)]*)?)/gi, (m, prefix, url) => {
+        if (/p\.gif|tracking|\/o\//i.test(url)) {
+            return prefix;
+        }
+        return `${prefix}<div class="chat-media-card"><img src="${url}" alt="Photo" class="chat-bubble-img" onclick="openChatImageLightbox('${url}')" loading="lazy" /><span class="chat-img-zoom-hint">🔍 Click to zoom</span></div>`;
+    });
+
+    // 8. Plain standalone URLs not already inside quotes/href/src
+    text = text.replace(/(^|[^"'>])(https?:\/\/[^\s<>\)"]+)/gi, (m, prefix, url) => {
+        return `${prefix}<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-link">${url} ↗</a>`;
+    });
+
+    // 9. Convert newlines
+    text = text.replace(/\n/g, '<br>');
+    return text;
+};
+
+// Render message bubbles in chat stream with date separators and intelligent scroll preservation
+function renderChatMessages(messages, conv, forceScrollBottom = false) {
     const container = document.getElementById('chatMessagesContainer');
     if (!container) return;
 
     if (!messages || messages.length === 0) {
         container.innerHTML = `
-            <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 13px;">
-                No messages recorded in this conversation yet.
+            <div style="padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px;">
+                <div style="font-size: 36px; margin-bottom: 8px;">💬</div>
+                <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">No messages yet</div>
+                <p style="font-size: 12px; max-width: 280px; margin: 0 auto; color: var(--text-secondary); line-height: 1.4;">
+                    Send a reply below to initiate or follow up with ${escapeHtml(conv.contact_name || 'this prospect')}.
+                </p>
             </div>
         `;
         return;
     }
 
-    container.innerHTML = messages.map(m => {
+    const wasNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 140;
+    const isFirstLoad = !container.children.length || container.querySelector('.table-loading');
+
+    let lastDateStr = null;
+    let html = '';
+
+    messages.forEach(m => {
         const isOutbound = m.direction === 'outbound';
         const rowClass = isOutbound ? 'outbound' : 'inbound';
-        const senderLabel = isOutbound ? 'You' : escapeHtml(conv.contact_name || conv.participant_name || conv.contact_identifier || conv.participant_contact || 'Prospect');
-        const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-        const dateStr = m.created_at ? new Date(m.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+        const senderLabel = isOutbound ? 'You' : escapeHtml(conv.contact_name || conv.participant_name || conv.contact_identifier || 'Prospect');
+        const msgDate = m.created_at ? new Date(m.created_at) : new Date();
+        const timeStr = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        const subjectHtml = m.subject ? `<div style="font-weight: 600; font-size: 12px; margin-bottom: 4px; opacity: 0.9;">Subject: ${escapeHtml(m.subject)}</div>` : '';
-        const textHtml = escapeHtml(m.body || m.message_body || m.subject || '').replace(/\n/g, '<br>');
+        // Date separator calculation
+        const dateKey = msgDate.toDateString();
+        if (dateKey !== lastDateStr) {
+            lastDateStr = dateKey;
+            const now = new Date();
+            const isToday = now.toDateString() === dateKey;
+            const yesterday = new Date();
+            yesterday.setDate(now.getDate() - 1);
+            const isYesterday = yesterday.toDateString() === dateKey;
+            const dateLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : msgDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+            html += `<div class="chat-date-separator"><span>${dateLabel}</span></div>`;
+        }
 
-        return `
+        const subjectHtml = (m.subject && conv.channel === 'email') 
+            ? `<div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(0,0,0,0.06); opacity: 0.9;">Subject: ${escapeHtml(m.subject)}</div>` 
+            : '';
+        const rawBody = m.body || m.message_body || m.subject || '';
+        const textHtml = formatChatMessageBody(rawBody);
+        const checkmarks = isOutbound 
+            ? '<span class="chat-checkmarks" title="Read / Delivered">✓✓</span>' 
+            : '';
+
+        html += `
             <div class="chat-bubble-row ${rowClass}">
                 <div class="chat-bubble ${rowClass}">
                     ${subjectHtml}
-                    <div>${textHtml}</div>
-                </div>
-                <div class="chat-bubble-meta">
-                    ${senderLabel} • ${dateStr} at ${timeStr}
+                    <div class="chat-msg-text">${textHtml}</div>
+                    <div class="chat-msg-meta">
+                        <span class="chat-msg-time">${timeStr}</span>
+                        ${checkmarks}
+                    </div>
                 </div>
             </div>
         `;
-    }).join('');
+    });
 
-    // Auto-scroll to bottom of conversation
-    container.scrollTop = container.scrollHeight;
+    container.innerHTML = html;
+
+    // Scroll down if forced, on first load, or if user was already at the bottom
+    if (forceScrollBottom || isFirstLoad || wasNearBottom) {
+        container.scrollTop = container.scrollHeight;
+    }
 }
 
-// Mobile back button action to return to list
+// Delete Active Conversation
+window.deleteActiveConversation = async function() {
+    if (!activeConversationId) return;
+    if (!confirm('Are you sure you want to delete this entire conversation and all its messages?')) return;
+
+    const idToDelete = activeConversationId;
+    try {
+        const res = await fetch(`/api/inbox/conversations/${idToDelete}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            showToast('✓ Conversation deleted');
+            activeConversationId = null;
+            allInboxConversations = allInboxConversations.filter(c => c.id != idToDelete);
+            
+            const emptyView = document.getElementById('inboxEmptyView');
+            const activeView = document.getElementById('inboxActiveChat');
+            if (emptyView) emptyView.style.display = 'flex';
+            if (activeView) activeView.style.display = 'none';
+
+            renderInboxThreads(false);
+            fetchInboxStats();
+        } else {
+            showToast('Delete error: ' + (data.error || 'Failed'));
+        }
+    } catch (err) {
+        showToast('Delete network error: ' + err.message);
+    }
+};
+
+// Delete Conversation by ID from thread list item
+window.deleteConversationById = async function(id, e) {
+    if (e) e.stopPropagation();
+    if (!confirm('Delete this conversation?')) return;
+
+    try {
+        const res = await fetch(`/api/inbox/conversations/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            showToast('✓ Conversation deleted');
+            if (activeConversationId == id) {
+                activeConversationId = null;
+                const emptyView = document.getElementById('inboxEmptyView');
+                const activeView = document.getElementById('inboxActiveChat');
+                if (emptyView) emptyView.style.display = 'flex';
+                if (activeView) activeView.style.display = 'none';
+            }
+            allInboxConversations = allInboxConversations.filter(c => c.id != id);
+            renderInboxThreads(true);
+            fetchInboxStats();
+        } else {
+            showToast('Delete error: ' + (data.error || 'Failed'));
+        }
+    } catch (err) {
+        showToast('Delete network error: ' + err.message);
+    }
+};
+
+// Mobile back button action to return to list (WhatsApp Mobile style)
 window.closeMobileChat = function() {
     document.body.classList.remove('mobile-inbox-open');
+    if (window.innerWidth <= 768) {
+        activeConversationId = null;
+        renderInboxThreads(true);
+    }
 };
+
+// Handle hardware / browser Back button on mobile devices
+window.addEventListener('popstate', (e) => {
+    if (document.body.classList.contains('mobile-inbox-open')) {
+        document.body.classList.remove('mobile-inbox-open');
+        if (window.innerWidth <= 768) {
+            activeConversationId = null;
+            renderInboxThreads(true);
+        }
+    }
+});
 
 // Filter by channel tabs
 window.filterInboxChannel = function(channel, btn) {
@@ -2342,6 +2646,8 @@ window.filterInboxChannel = function(channel, btn) {
         }
     });
 
+    // Reset active conversation on channel switch to avoid mismatch
+    activeConversationId = null;
     loadInboxConversations();
 };
 
@@ -2357,8 +2663,8 @@ window.sendActiveChatReply = async function() {
     if (!input) return;
 
     const messageText = input.value.trim();
-    if (!messageText) {
-        showToast('Please write a message before sending.');
+    if (!messageText && !activeChatAttachment) {
+        showToast('Please write a message or attach a photo before sending.');
         input.focus();
         return;
     }
@@ -2369,34 +2675,64 @@ window.sendActiveChatReply = async function() {
     }
 
     try {
+        let mediaUrl = null;
+        if (activeChatAttachment) {
+            try {
+                const uploadRes = await fetch('/api/inbox/upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: activeChatAttachment.filename,
+                        base64: activeChatAttachment.base64
+                    })
+                });
+                const uploadData = await uploadRes.json();
+                if (uploadData.success) {
+                    mediaUrl = uploadData.url;
+                }
+            } catch (upErr) {
+                console.warn('Failed to upload attachment:', upErr.message);
+            }
+        }
+
         const res = await fetch(`/api/inbox/conversations/${activeConversationId}/reply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: messageText })
+            body: JSON.stringify({
+                message: messageText,
+                mediaUrl: mediaUrl
+            })
         });
 
         const data = await res.json();
         if (data.success) {
             showToast('✓ Reply dispatched successfully!');
             input.value = '';
+            if (window.autoResizeChatInput) window.autoResizeChatInput(input);
 
             // Optimistically append outbound bubble
             const container = document.getElementById('chatMessagesContainer');
             if (container) {
                 const now = new Date();
+                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const fullOutboundText = mediaUrl ? `![Photo](${mediaUrl})\n${messageText}`.trim() : messageText;
                 const bubbleHtml = `
                     <div class="chat-bubble-row outbound">
                         <div class="chat-bubble outbound">
-                            <div>${escapeHtml(messageText).replace(/\n/g, '<br>')}</div>
-                        </div>
-                        <div class="chat-bubble-meta">
-                            You • Just now
+                            <div class="chat-msg-text">${formatChatMessageBody(fullOutboundText)}</div>
+                            <div class="chat-msg-meta">
+                                <span class="chat-msg-time">${timeStr}</span>
+                                <span class="chat-checkmarks" title="Delivered">✓✓</span>
+                            </div>
                         </div>
                     </div>
                 `;
                 container.insertAdjacentHTML('beforeend', bubbleHtml);
                 container.scrollTop = container.scrollHeight;
             }
+
+            // Clear attachment preview
+            removeChatAttachment();
 
             // Refresh list in background
             loadInboxConversations(true);
@@ -2409,12 +2745,83 @@ window.sendActiveChatReply = async function() {
         if (sendBtn) {
             sendBtn.disabled = false;
             sendBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                <span>Send</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             `;
         }
     }
 };
+
+// Auto-expanding chat textarea (WhatsApp Web behavior)
+window.autoResizeChatInput = function(el) {
+    const input = el || document.getElementById('chatReplyInput');
+    if (!input) return;
+    
+    // Temporarily reset height to auto to compute natural scrollHeight
+    input.style.height = 'auto';
+    
+    const minHeight = 40;
+    const maxHeight = 140; // Expands up to ~6 lines before internal scrolling
+    const scrollH = input.scrollHeight;
+    
+    if (scrollH <= minHeight) {
+        input.style.height = minHeight + 'px';
+        input.style.overflowY = 'hidden';
+    } else if (scrollH >= maxHeight) {
+        input.style.height = maxHeight + 'px';
+        input.style.overflowY = 'auto';
+    } else {
+        input.style.height = scrollH + 'px';
+        input.style.overflowY = 'hidden';
+    }
+};
+
+// Enter key binding & Auto-resize listeners
+function initChatInputHandlers() {
+    const input = document.getElementById('chatReplyInput');
+    if (input && !input.dataset.handlersAttached) {
+        input.dataset.handlersAttached = 'true';
+        input.addEventListener('input', () => {
+            window.autoResizeChatInput(input);
+        });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendActiveChatReply();
+            }
+        });
+        window.autoResizeChatInput(input);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initChatInputHandlers);
+} else {
+    initChatInputHandlers();
+}
+
+// Real-time silent poller for Unified Inbox (every 4 seconds when inbox screen is open)
+if (window.inboxPollTimer) clearInterval(window.inboxPollTimer);
+window.inboxPollTimer = setInterval(async () => {
+    if (typeof currentScreen !== 'undefined' && currentScreen === 'inbox') {
+        await loadInboxConversations(true);
+        if (activeConversationId) {
+            try {
+                const res = await fetch(`/api/inbox/conversations/${activeConversationId}`);
+                const data = await res.json();
+                if (data.success && data.conversation) {
+                    const conv = data.conversation;
+                    const msgs = conv.messages || [];
+                    const container = document.getElementById('chatMessagesContainer');
+                    const currentBubbleCount = container ? container.querySelectorAll('.chat-bubble-row').length : 0;
+                    if (msgs.length !== currentBubbleCount) {
+                        renderChatMessages(msgs, conv, false);
+                    }
+                }
+            } catch (e) {}
+        }
+        fetchInboxStats();
+    }
+}, 4000);
 
 // AI Suggest contextual reply
 window.suggestAIReplyForCurrentChat = async function() {
@@ -2438,6 +2845,7 @@ window.suggestAIReplyForCurrentChat = async function() {
                 const suggestion = `Hi ${lead.gmb_owner_name || 'there'}! Thanks for getting back to me. I'd love to share a quick 2-minute Loom breakdown showing how we can solve ${painPoints || 'client acquisition bottlenecks'} for ${lead.title}. Are you open to reviewing it this week?`;
                 input.value = suggestion;
                 input.focus();
+                if (window.autoResizeChatInput) window.autoResizeChatInput(input);
                 showToast('✨ High-converting AI reply inserted!');
                 return;
             }
@@ -2446,6 +2854,7 @@ window.suggestAIReplyForCurrentChat = async function() {
         // Generic fallback
         input.value = `Hi there! Thank you for your reply. Could you let me know what day this week works best for a quick 10-minute discovery call? Looking forward to connecting.`;
         input.focus();
+        if (window.autoResizeChatInput) window.autoResizeChatInput(input);
         showToast('✨ AI reply suggestion inserted!');
     } catch (err) {
         showToast('AI suggestion error: ' + err.message);
@@ -2530,6 +2939,10 @@ window.openChannelsModal = async function() {
 window.closeChannelsModal = function() {
     const modal = document.getElementById('channelsModalOverlay');
     if (modal) modal.style.display = 'none';
+    if (window.waStatusPollTimer) {
+        clearInterval(window.waStatusPollTimer);
+        window.waStatusPollTimer = null;
+    }
 };
 
 // Robust Tab Switcher for Channels Modal
@@ -2537,7 +2950,7 @@ window.switchChannelSettingsTab = window.switchChannelTab = function(tabName, bt
     const norm = (tabName || '').toLowerCase();
     const isEmail = norm.includes('email');
     const isWa = norm.includes('wa') || norm.includes('whats');
-    const isIg = norm.includes('ig') || norm.includes('insta') || norm.includes('meta');
+    const isIg = norm.includes('ig') || norm.includes('insta') || norm.includes('meta') || norm.includes('many');
 
     // 1. Toggle Tab Panes
     const emailPane = document.getElementById('chanTabEmail');
@@ -2560,155 +2973,174 @@ window.switchChannelSettingsTab = window.switchChannelTab = function(tabName, bt
 
     // 3. Auto-populate current origin for Webhook URLs
     const origin = window.location.origin;
-    const waUrlInput = document.getElementById('waWebhookUrlDisplay');
-    const igUrlInput = document.getElementById('metaWebhookUrlDisplay');
+    const manychatUrlInput = document.getElementById('manychatWebhookUrlDisplay');
+    if (manychatUrlInput) manychatUrlInput.value = `${origin}/api/webhooks/manychat`;
 
-    if (waUrlInput) waUrlInput.value = `${origin}/api/webhooks/whatsapp`;
-    if (igUrlInput) igUrlInput.value = `${origin}/api/webhooks/instagram`;
+    // If switching to WhatsApp, check current status
+    if (isWa) {
+        checkWhatsAppStatus();
+    }
 };
 
-window.saveAndSyncEmailChannel = async function() {
-    const host = document.getElementById('imapHost')?.value.trim();
-    const port = parseInt(document.getElementById('imapPort')?.value || '993', 10);
-    const email = document.getElementById('imapEmail')?.value.trim();
-    const pass = document.getElementById('imapPass')?.value.trim();
-    const notice = document.getElementById('emailSyncStatusNotice');
-    const saveBtn = document.getElementById('saveAndSyncEmailBtn');
+// ==========================================================
+// WHATSAPP LIVE BAILEYS QR CODE ENGINE
+// ==========================================================
 
-    if (!host || !email || !pass) {
-        showToast('Please fill in IMAP Host, Email, and App Password.');
-        return;
+window.checkWhatsAppStatus = async function() {
+    try {
+        const res = await fetch('/api/whatsapp/status');
+        const data = await res.json();
+        updateWhatsAppUI(data);
+    } catch (err) {
+        console.warn('Could not check WhatsApp status:', err.message);
     }
+};
 
-    if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = '<span>⏳ Encrypting credentials & saving...</span>';
+function updateWhatsAppUI(data) {
+    const statusDot = document.getElementById('waStatusDot');
+    const statusText = document.getElementById('waStatusText');
+    const disconnectBtn = document.getElementById('waDisconnectBtn');
+    const qrPlaceholder = document.getElementById('waQrPlaceholder');
+    const qrActive = document.getElementById('waQrActive');
+    const connectedNotice = document.getElementById('waConnectedNotice');
+    const connectedPhone = document.getElementById('waConnectedPhoneDisplay');
+    const qrImage = document.getElementById('waQrImage');
+    const qrSpinner = document.getElementById('waQrSpinner');
+
+    if (data.status === 'connected') {
+        if (statusDot) statusDot.style.backgroundColor = '#10B981';
+        if (statusText) statusText.innerHTML = `Status: <span style="color: #15803D;">Connected (+${data.connectedUser || ''})</span>`;
+        if (disconnectBtn) disconnectBtn.style.display = 'inline-flex';
+
+        if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+        if (qrActive) qrActive.style.display = 'none';
+        if (connectedNotice) connectedNotice.style.display = 'block';
+        if (connectedPhone) connectedPhone.textContent = `Linked Phone: +${data.connectedUser || 'Active'}`;
+
+        if (window.waStatusPollTimer) {
+            clearInterval(window.waStatusPollTimer);
+            window.waStatusPollTimer = null;
+        }
+    } else if (data.status === 'qr_ready' && data.qr) {
+        if (statusDot) statusDot.style.backgroundColor = '#F59E0B';
+        if (statusText) statusText.innerHTML = `Status: <span style="color: #B45309;">Waiting for scan...</span>`;
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
+
+        if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+        if (connectedNotice) connectedNotice.style.display = 'none';
+        if (qrActive) qrActive.style.display = 'block';
+        if (qrSpinner) qrSpinner.style.display = 'none';
+        if (qrImage) {
+            qrImage.src = data.qr;
+            qrImage.style.display = 'block';
+        }
+    } else {
+        // Disconnected or connecting
+        if (statusDot) statusDot.style.backgroundColor = '#A1A1AA';
+        if (statusText) statusText.innerHTML = `Status: Disconnected`;
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
+
+        if (qrPlaceholder) qrPlaceholder.style.display = 'block';
+        if (qrActive) qrActive.style.display = 'none';
+        if (connectedNotice) connectedNotice.style.display = 'none';
     }
+}
+
+window.requestWhatsAppQr = async function() {
+    const btn = document.getElementById('btnStartWaQr');
+    const qrPlaceholder = document.getElementById('waQrPlaceholder');
+    const qrActive = document.getElementById('waQrActive');
+    const qrSpinner = document.getElementById('waQrSpinner');
+    const qrImage = document.getElementById('waQrImage');
+
+    if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+    if (qrActive) qrActive.style.display = 'block';
+    if (qrSpinner) {
+        qrSpinner.style.display = 'block';
+        qrSpinner.textContent = 'Initializing secure WhatsApp session... Generating QR...';
+    }
+    if (qrImage) qrImage.style.display = 'none';
 
     try {
-        const res = await fetch('/api/inbox/channels/email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                imap_host: host,
-                imap_port: port,
-                email: email,
-                password: pass
-            })
-        });
-
+        const res = await fetch('/api/whatsapp/qr', { method: 'POST' });
         const data = await res.json();
-        if (data.success) {
-            if (notice) {
-                notice.style.display = 'block';
-                notice.style.background = '#ECFDF5';
-                notice.style.border = '1px solid #A7F3D0';
-                notice.style.color = '#065F46';
-                notice.innerHTML = '<strong>✓ Saved!</strong> Encrypted with AES-256-GCM. Running initial sync...';
-            }
-            showToast('✓ IMAP Credentials Encrypted and Saved!');
+        updateWhatsAppUI(data);
 
-            // Trigger immediate sync
-            const syncRes = await fetch('/api/inbox/email/sync', { method: 'POST' });
-            const syncData = await syncRes.json();
-            if (syncData.success) {
-                if (notice) notice.innerHTML = `<strong>✓ IMAP Synced!</strong> ${syncData.syncedCount || 0} prospect messages imported.`;
-                showToast(`✓ Initial sync retrieved ${syncData.syncedCount || 0} prospect emails.`);
-                loadInboxConversations();
-                fetchInboxStats();
-            } else {
-                if (notice) notice.innerHTML = `<strong>⚠️ Notice:</strong> ${escapeHtml(syncData.error || 'Check credentials')}`;
-            }
-        } else {
-            showToast('Save failed: ' + (data.error || 'Server error'));
+        // Start auto-poll every 2.5 seconds to detect phone scan
+        if (!window.waStatusPollTimer) {
+            window.waStatusPollTimer = setInterval(async () => {
+                try {
+                    const statusRes = await fetch('/api/whatsapp/status');
+                    const statusData = await statusRes.json();
+                    updateWhatsAppUI(statusData);
+
+                    if (statusData.status === 'connected') {
+                        showToast(`✓ WhatsApp Linked: +${statusData.connectedUser || 'Active'}`);
+                        loadInboxConversations();
+                        fetchInboxStats();
+                    }
+                } catch (e) {}
+            }, 2500);
         }
     } catch (err) {
-        showToast('Error saving IMAP channel: ' + err.message);
-    } finally {
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = '<span>💾 Save & Test IMAP Sync</span>';
-        }
+        showToast('Error requesting WhatsApp QR: ' + err.message);
+        if (qrPlaceholder) qrPlaceholder.style.display = 'block';
+        if (qrActive) qrActive.style.display = 'none';
     }
 };
 
-window.simulateInboundWhatsAppMessage = async function() {
-    const btn = document.getElementById('sendWaTestMsgBtn');
-    if (btn) btn.disabled = true;
+window.disconnectWhatsAppSession = async function() {
+    if (!confirm('Are you sure you want to unlink and disconnect your WhatsApp?')) return;
 
     try {
-        const res = await fetch('/api/webhooks/whatsapp', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Webhook-Secret': 'cb_wa_secret_2026'
-            },
-            body: JSON.stringify({
-                event: 'messages.upsert',
-                data: {
-                    from: '923001234567@s.whatsapp.net',
-                    pushName: 'Dr. Zafar Medical',
-                    text: 'Hello, saw your message regarding GMB optimization. What are your pricing plans?'
-                }
-            })
-        });
-
+        const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-            showToast('✓ WhatsApp inbound simulated and verified!');
-            loadInboxConversations();
-            fetchInboxStats();
+            showToast('✓ WhatsApp unlinked successfully.');
+            updateWhatsAppUI({ status: 'disconnected' });
         } else {
-            showToast('Simulation failed: ' + (data.error || 'Error'));
+            showToast('Disconnect error: ' + (data.error || 'Server error'));
         }
     } catch (err) {
-        showToast('Error simulating WhatsApp: ' + err.message);
-    } finally {
-        if (btn) btn.disabled = false;
+        showToast('Error disconnecting: ' + err.message);
     }
 };
 
-window.simulateInboundInstagramMessage = async function() {
-    const btn = document.getElementById('sendIgTestMsgBtn');
+// ==========================================================
+// MANYCHAT INSTAGRAM BRIDGE
+// ==========================================================
+
+window.simulateManyChatInboundMessage = async function() {
+    const btn = document.getElementById('sendManyChatTestMsgBtn');
     if (btn) btn.disabled = true;
 
     try {
         const payload = {
-            object: 'instagram',
-            entry: [{
-                id: 'ig_test_page_1',
-                time: Date.now(),
-                messaging: [{
-                    sender: { id: 'ig_user_4499', username: 'lahore_dental_studio' },
-                    recipient: { id: 'ig_my_business' },
-                    timestamp: Date.now(),
-                    message: {
-                        mid: 'm_' + Math.random().toString(36).substring(7),
-                        text: 'Hey! Are you still offering dental practice lead generation in Lahore?'
-                    }
-                }]
-            }]
+            user_id: 'manychat_user_' + Math.floor(Math.random() * 8999 + 1000),
+            first_name: 'Dr. Bilal',
+            last_name: 'Orthodontics',
+            instagram_username: 'dr_bilal_ortho',
+            phone: '+923019876543',
+            message: 'Hello! I saw your proposal regarding our clinic Google Maps ranking. Can you share past client case studies?',
+            channel: 'instagram'
         };
 
-        const res = await fetch('/api/webhooks/instagram', {
+        const res = await fetch('/api/webhooks/manychat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Hub-Signature-256': 'sha256=simulation'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
-        const text = await res.text();
-        if (res.ok && (text.includes('EVENT_RECEIVED') || text.includes('success'))) {
-            showToast('✓ Instagram DM simulated and recorded!');
+        const data = await res.json();
+        if (data.success) {
+            showToast('✓ ManyChat Instagram DM received & synced into Inbox!');
             loadInboxConversations();
             fetchInboxStats();
         } else {
-            showToast('Simulation error: ' + text);
+            showToast('Simulation error: ' + (data.error || 'Server error'));
         }
     } catch (err) {
-        showToast('Error simulating Instagram: ' + err.message);
+        showToast('Error simulating ManyChat: ' + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }

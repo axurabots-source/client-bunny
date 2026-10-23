@@ -84,6 +84,20 @@ class InboxRepository {
                 conversationId = convRes.rows[0].id;
                 currentUnread = convRes.rows[0].unread_count || 0;
 
+                // Deduplication check: check if message key id already exists in conversation
+                const msgKeyId = rawPayload?.key?.id;
+                if (msgKeyId && conversationId) {
+                    const exists = await client.query(`
+                        SELECT id FROM messages 
+                        WHERE conversation_id = $1 AND raw_payload->'key'->>'id' = $2
+                        LIMIT 1;
+                    `, [conversationId, msgKeyId]);
+                    if (exists.rows.length > 0) {
+                        await client.query('COMMIT');
+                        return { conversationId, skipped: true, matchedLead };
+                    }
+                }
+
                 await client.query(`
                     UPDATE conversations SET
                         lead_id = COALESCE(lead_id, $1),
@@ -145,10 +159,87 @@ class InboxRepository {
                 matchedLead
             };
         } catch (err) {
-            await client.query('ROLLBACK');
+            await client.query('ROLLBACK').catch(() => {});
             throw err;
         } finally {
-            client.release();
+            try { client.release(); } catch (e) {}
+        }
+    }
+
+    /**
+     * Record an outbound WhatsApp message sent from mobile phone or web
+     */
+    static async recordOutboundWhatsAppMessage({ phone, body, timestamp, rawPayload }) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const cleanDigits = String(phone).replace(/\D/g, '');
+            const cleanPhone = '+' + cleanDigits;
+            const matchedLead = await this.matchLeadByContact(cleanPhone, 'whatsapp');
+            const leadId = matchedLead ? matchedLead.id : null;
+            const displayName = matchedLead ? matchedLead.title : cleanPhone;
+
+            const convRes = await client.query(`
+                SELECT id FROM conversations
+                WHERE channel = 'whatsapp' AND contact_identifier = $1
+                LIMIT 1;
+            `, [cleanPhone]);
+
+            let conversationId;
+            const preview = (body || '').substring(0, 150).replace(/\s+/g, ' ').trim();
+            const msgTime = timestamp ? new Date(timestamp) : new Date();
+
+            if (convRes.rows.length > 0) {
+                conversationId = convRes.rows[0].id;
+                await client.query(`
+                    UPDATE conversations SET
+                        last_message_preview = $1,
+                        last_message_at = $2,
+                        updated_at = NOW()
+                    WHERE id = $3;
+                `, [preview, msgTime, conversationId]);
+            } else {
+                const insertConv = await client.query(`
+                    INSERT INTO conversations (
+                        lead_id, channel, contact_identifier, contact_name,
+                        subject, last_message_preview, last_message_at, unread_count, status, created_at, updated_at
+                    ) VALUES (
+                        $1, 'whatsapp', $2, $3, 'WhatsApp Chat', $4, $5, 0, 'replied', NOW(), NOW()
+                    ) RETURNING id;
+                `, [leadId, cleanPhone, displayName, preview, msgTime]);
+                conversationId = insertConv.rows[0].id;
+            }
+
+            // Deduplication check: check if message key id already exists in conversation
+            const msgKeyId = rawPayload?.key?.id;
+            if (msgKeyId) {
+                const exists = await client.query(`
+                    SELECT id FROM messages 
+                    WHERE conversation_id = $1 AND raw_payload->'key'->>'id' = $2
+                    LIMIT 1;
+                `, [conversationId, msgKeyId]);
+                if (exists.rows.length > 0) {
+                    await client.query('COMMIT');
+                    return { conversationId, skipped: true };
+                }
+            }
+
+            await client.query(`
+                INSERT INTO messages (
+                    conversation_id, lead_id, channel, direction, sender, recipient,
+                    subject, body, raw_payload, status, created_at
+                ) VALUES (
+                    $1, $2, 'whatsapp', 'outbound', 'Me', $3, 'WhatsApp Chat', $4, $5, 'sent', $6
+                );
+            `, [conversationId, leadId, cleanPhone, body || '', JSON.stringify(rawPayload || {}), msgTime]);
+
+            await client.query('COMMIT');
+            return { conversationId };
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            try { client.release(); } catch (e) {}
         }
     }
 
@@ -198,10 +289,10 @@ class InboxRepository {
             await client.query('COMMIT');
             return msgInsert.rows[0];
         } catch (err) {
-            await client.query('ROLLBACK');
+            await client.query('ROLLBACK').catch(() => {});
             throw err;
         } finally {
-            client.release();
+            try { client.release(); } catch (e) {}
         }
     }
 
@@ -370,6 +461,25 @@ class InboxRepository {
             last_synced_at: row.last_synced_at,
             config
         };
+    }
+
+    /**
+     * Delete a conversation thread and its messages
+     */
+    static async deleteConversation(conversationId) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('DELETE FROM messages WHERE conversation_id = $1;', [conversationId]);
+            await client.query('DELETE FROM conversations WHERE id = $1;', [conversationId]);
+            await client.query('COMMIT');
+            return { success: true };
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            try { client.release(); } catch (e) {}
+        }
     }
 }
 

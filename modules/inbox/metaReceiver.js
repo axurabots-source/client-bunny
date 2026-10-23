@@ -90,6 +90,34 @@ class MetaReceiver {
 
         return res.sendStatus(404);
     }
+
+    /**
+     * Handle Inbound Webhook from ManyChat (Instagram / FB Automation Bridge)
+     */
+    static async handleManyChatWebhook(req, res) {
+        try {
+            const body = req.body || {};
+            const senderId = body.instagram_username || body.ig_username || body.username || body.user_id || body.id || 'instagram_user';
+            const senderName = [body.first_name, body.last_name].filter(Boolean).join(' ') || body.full_name || body.name || `@${senderId}`;
+            const messageText = body.message || body.last_input_text || body.text || body.body || '[Instagram Message]';
+
+            const result = await InboxRepository.recordInboundMessage({
+                channel: 'instagram',
+                sender: senderId.startsWith('@') ? senderId : `@${senderId}`,
+                recipient: 'Me',
+                subject: 'Instagram Direct Message',
+                body: messageText,
+                senderName,
+                rawPayload: body,
+                timestamp: new Date()
+            });
+
+            return res.json({ success: true, message: 'Recorded in Unified Inbox', conversationId: result.conversationId });
+        } catch (err) {
+            console.error('[ManyChat Webhook] Error processing event:', err);
+            return res.status(500).json({ success: false, error: err.message });
+        }
+    }
 }
 
 module.exports = { MetaReceiver };
