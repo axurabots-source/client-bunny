@@ -14,6 +14,9 @@ const { MetaReceiver } = require('./metaReceiver');
 const { dispatchColdEmail } = require('../m5_email_dispatcher/mailer');
 const { baileysManager } = require('./baileysManager');
 
+// Auto-start background IMAP email sync every 25 seconds
+EmailInboundSync.startAutoSync(25);
+
 // 1. Get Inbox Overview Stats (Total unread, counts by channel)
 router.get('/inbox/stats', async (req, res) => {
     try {

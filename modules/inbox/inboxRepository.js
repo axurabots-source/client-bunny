@@ -84,17 +84,31 @@ class InboxRepository {
                 conversationId = convRes.rows[0].id;
                 currentUnread = convRes.rows[0].unread_count || 0;
 
-                // Deduplication check: check if message key id already exists in conversation
+                // Deduplication check: check if email messageId or WhatsApp key id already exists
                 const msgKeyId = rawPayload?.key?.id;
-                if (msgKeyId && conversationId) {
-                    const exists = await client.query(`
-                        SELECT id FROM messages 
-                        WHERE conversation_id = $1 AND raw_payload->'key'->>'id' = $2
-                        LIMIT 1;
-                    `, [conversationId, msgKeyId]);
-                    if (exists.rows.length > 0) {
-                        await client.query('COMMIT');
-                        return { conversationId, skipped: true, matchedLead };
+                const emailMessageId = rawPayload?.messageId;
+
+                if (conversationId) {
+                    if (emailMessageId) {
+                        const exists = await client.query(`
+                            SELECT id FROM messages 
+                            WHERE conversation_id = $1 AND raw_payload->>'messageId' = $2
+                            LIMIT 1;
+                        `, [conversationId, emailMessageId]);
+                        if (exists.rows.length > 0) {
+                            await client.query('COMMIT');
+                            return { conversationId, skipped: true, matchedLead };
+                        }
+                    } else if (msgKeyId) {
+                        const exists = await client.query(`
+                            SELECT id FROM messages 
+                            WHERE conversation_id = $1 AND raw_payload->'key'->>'id' = $2
+                            LIMIT 1;
+                        `, [conversationId, msgKeyId]);
+                        if (exists.rows.length > 0) {
+                            await client.query('COMMIT');
+                            return { conversationId, skipped: true, matchedLead };
+                        }
                     }
                 }
 

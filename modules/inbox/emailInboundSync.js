@@ -92,17 +92,19 @@ class EmailInboundSync {
                                     timestamp: messageDate
                                 });
 
-                                syncedCount++;
-                                if (recordResult.matchedLead) {
-                                    matchedCount++;
-                                }
+                                if (!recordResult.skipped) {
+                                    syncedCount++;
+                                    if (recordResult.matchedLead) {
+                                        matchedCount++;
+                                    }
 
-                                processedMessages.push({
-                                    id: recordResult.message.id,
-                                    from: senderEmail,
-                                    subject,
-                                    matchedLead: recordResult.matchedLead ? recordResult.matchedLead.title : null
-                                });
+                                    processedMessages.push({
+                                        id: recordResult.message ? recordResult.message.id : recordResult.conversationId,
+                                        from: senderEmail,
+                                        subject,
+                                        matchedLead: recordResult.matchedLead ? recordResult.matchedLead.title : null
+                                    });
+                                }
                             }
                         } catch (parseErr) {
                             console.error('Failed to parse individual email:', parseErr.message);
@@ -133,6 +135,41 @@ class EmailInboundSync {
                 success: false,
                 error: err.message || 'Failed to connect to IMAP email server.'
             };
+        }
+    }
+
+    /**
+     * Start background automatic IMAP polling
+     */
+    static startAutoSync(intervalSeconds = 25) {
+        if (this.pollerInterval) return;
+        console.log(`[EmailSync] 🔄 Background IMAP auto-poller initiated (every ${intervalSeconds}s)...`);
+
+        // First run shortly after startup
+        setTimeout(() => {
+            this.safeBackgroundSync();
+        }, 3000);
+
+        this.pollerInterval = setInterval(() => {
+            this.safeBackgroundSync();
+        }, intervalSeconds * 1000);
+    }
+
+    /**
+     * Safely execute background sync with lock to prevent concurrent overlaps
+     */
+    static async safeBackgroundSync() {
+        if (this.isSyncing) return;
+        this.isSyncing = true;
+        try {
+            const res = await this.syncInbox({ limit: 15 });
+            if (res && res.success && res.syncedCount > 0) {
+                console.log(`[EmailSync] 📥 Auto-synced ${res.syncedCount} new incoming prospect email(s) into Omnichannel Inbox!`);
+            }
+        } catch (err) {
+            // Non-critical background network timeout
+        } finally {
+            this.isSyncing = false;
         }
     }
 }

@@ -117,13 +117,17 @@
     {
       "milestone": "Module 14: Unified Email Config & Inbox Outbound Reply Dispatch",
       "description": "Unified Email configuration across the entire app so Leads cold pitch dispatcher and Omnichannel Inbox share the same AES-256 encrypted SMTP credentials from channel_settings (axurabots@gmail.com). Fixed inbox reply endpoint (/inbox/conversations/:id/reply) to auto-resolve channel credentials and send email replies via SMTP. Verified live email delivery to blinknship@gmail.com."
+    },
+    {
+      "milestone": "Module 15: Background IMAP Inbound Poller & MessageId Deduplication",
+      "description": "Added automated background IMAP polling service running every 25 seconds with concurrency lock to automatically fetch prospect replies from Gmail into the Omnichannel Inbox without requiring manual button clicks. Added messageId deduplication in inboxRepository.js to prevent duplicate imports."
     }
   ],
-  "current_checkpoint": "Unified Email configuration across Leads and Inbox channels. Inbox email replies and cold pitches seamlessly resolve encrypted credentials from channel_settings. Dual port listening (3000 & 3005) enabled and node --watch active so browser sessions on either port instantly dispatch live SMTP emails.",
+  "current_checkpoint": "Omnichannel Email Inbound and Outbound bidirectional synchronization fully operational. Automated background IMAP poller fetches prospect email replies every 25 seconds with messageId deduplication. Inbound reply from blinknship@gmail.com verified in inbox thread.",
   "next_immediate_steps": [
     "Scan live WhatsApp QR code from phone to establish verified session if unlinked.",
     "Monitor unified conversations and replies stream in Omnichannel Inbox.",
-    "Prospect cold email pitching directly uses unified Inbox channel credentials."
+    "Verify automatic incoming email bubble rendering in real time."
   ],
   "key_files": {
     "server": "server.js",
