@@ -119,7 +119,7 @@
       "description": "Unified Email configuration across the entire app so Leads cold pitch dispatcher and Omnichannel Inbox share the same AES-256 encrypted SMTP credentials from channel_settings (axurabots@gmail.com). Fixed inbox reply endpoint (/inbox/conversations/:id/reply) to auto-resolve channel credentials and send email replies via SMTP. Verified live email delivery to blinknship@gmail.com."
     }
   ],
-  "current_checkpoint": "Unified Email configuration across Leads and Inbox channels. Inbox email replies and cold pitches now seamlessly resolve encrypted credentials from channel_settings. Outbound email reply to blinknship@gmail.com verified with active message ID.",
+  "current_checkpoint": "Unified Email configuration across Leads and Inbox channels. Inbox email replies and cold pitches seamlessly resolve encrypted credentials from channel_settings. Dual port listening (3000 & 3005) enabled and node --watch active so browser sessions on either port instantly dispatch live SMTP emails.",
   "next_immediate_steps": [
     "Scan live WhatsApp QR code from phone to establish verified session if unlinked.",
     "Monitor unified conversations and replies stream in Omnichannel Inbox.",

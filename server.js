@@ -462,6 +462,14 @@ if (require.main === module) {
             console.error("Server error:", err);
         }
     });
+
+    // Also bind auxiliary port 3005 so users with existing 3005 browser tabs work seamlessly
+    try {
+        const auxServer = app.listen(3005, () => {
+            console.log(`[Aux] Also listening on http://localhost:3005 for backward compatibility`);
+        });
+        auxServer.on('error', () => { /* ignore if already bound */ });
+    } catch (e) {}
 }
 
 module.exports = app;
