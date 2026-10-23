@@ -40,6 +40,9 @@ class EmailInboundSync {
                 user: user.trim(),
                 pass: pass.trim()
             },
+            connectionTimeout: 12000,
+            greetingTimeout: 8000,
+            socketTimeout: 15000,
             logger: false
         });
 

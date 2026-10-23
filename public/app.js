@@ -2866,7 +2866,7 @@ window.triggerEmailSync = async function(btn) {
     const origHtml = btn ? btn.innerHTML : null;
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<span>⏳ Syncing IMAP...</span>`;
+        btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;"><svg class="spin-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> Syncing...</span>`;
     }
 
     showToast('Connecting to IMAP server to fetch prospect emails...');
@@ -2899,6 +2899,115 @@ window.triggerEmailSync = async function(btn) {
     }
 };
 
+// Save and Test Email IMAP Configuration from Channels Modal
+window.saveAndSyncEmailChannel = async function() {
+    const hostEl = document.getElementById('imapHost');
+    const portEl = document.getElementById('imapPort');
+    const emailEl = document.getElementById('imapEmail');
+    const passEl = document.getElementById('imapPass');
+    const btn = document.getElementById('saveAndSyncEmailBtn');
+    const noticeEl = document.getElementById('emailSyncStatusNotice');
+
+    const host = hostEl ? hostEl.value.trim() : 'imap.gmail.com';
+    const port = portEl ? (parseInt(portEl.value.trim(), 10) || 993) : 993;
+    const email = emailEl ? emailEl.value.trim() : '';
+    const pass = passEl ? passEl.value.trim() : '';
+
+    if (!email) {
+        showToast('Please enter your email address');
+        if (emailEl) emailEl.focus();
+        return;
+    }
+
+    if (!pass) {
+        showToast('Please enter your 16-character App Password');
+        if (passEl) passEl.focus();
+        return;
+    }
+
+    const origBtnHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">⏳ Testing & Saving IMAP Sync...</span>`;
+    }
+
+    if (noticeEl) {
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = '#EFF6FF';
+        noticeEl.style.border = '1px solid #BFDBFE';
+        noticeEl.style.color = '#1E40AF';
+        noticeEl.innerHTML = `🛡️ Connecting to <strong>${host}:${port}</strong> as <strong>${email}</strong>... Please hold on...`;
+    }
+
+    try {
+        // 1. Save config securely to database
+        const saveRes = await fetch('/api/inbox/channels/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                imapHost: host,
+                imapPort: port,
+                email: email,
+                user: email,
+                password: pass
+            })
+        });
+        const saveData = await saveRes.json();
+        if (!saveData.success) {
+            throw new Error(saveData.error || 'Failed to save email settings');
+        }
+
+        // 2. Test live sync with saved credentials
+        const syncRes = await fetch('/api/inbox/email/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                host,
+                port,
+                user: email,
+                pass: pass,
+                limit: 10
+            })
+        });
+        const syncData = await syncRes.json();
+
+        if (syncData.success) {
+            if (noticeEl) {
+                noticeEl.style.background = '#F0FDF4';
+                noticeEl.style.border = '1px solid #BBF7D0';
+                noticeEl.style.color = '#166534';
+                noticeEl.innerHTML = `✓ <strong>Connected & Verified!</strong> Synced ${syncData.syncedCount || 0} messages (${syncData.matchedCount || 0} matched to CRM leads).`;
+            }
+            showToast('✓ Email IMAP settings saved and verified!');
+            if (passEl) passEl.value = ''; // Clear for security
+            loadInboxConversations();
+            fetchInboxStats();
+        } else {
+            const errMsg = syncData.error || 'Could not authenticate with IMAP. Please check App Password.';
+            if (noticeEl) {
+                noticeEl.style.background = '#FEF2F2';
+                noticeEl.style.border = '1px solid #FECACA';
+                noticeEl.style.color = '#991B1B';
+                noticeEl.innerHTML = `✕ <strong>Connection Failed:</strong> ${errMsg}`;
+            }
+            showToast('IMAP Test Failed: ' + errMsg);
+        }
+    } catch (err) {
+        if (noticeEl) {
+            noticeEl.style.background = '#FEF2F2';
+            noticeEl.style.border = '1px solid #FECACA';
+            noticeEl.style.color = '#991B1B';
+            noticeEl.innerHTML = `✕ <strong>Error:</strong> ${err.message}`;
+        }
+        showToast('Error saving IMAP: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origBtnHtml;
+        }
+    }
+};
+
 // Open lead profile drawer from current chat
 window.openLeadProfileFromCurrentChat = function() {
     if (activeConversationLeadId) {
@@ -2925,10 +3034,24 @@ window.openChannelsModal = async function() {
         const data = await res.json();
         if (data.success && data.channels && data.channels.email) {
             const emailCfg = data.channels.email.config || {};
-            if (emailCfg.imap_host) document.getElementById('imapHost').value = emailCfg.imap_host;
-            if (emailCfg.imap_port) document.getElementById('imapPort').value = emailCfg.imap_port;
-            if (emailCfg.email || data.channels.email.emailAddress) {
-                document.getElementById('imapEmail').value = emailCfg.email || data.channels.email.emailAddress;
+            if (emailCfg.imap_host && document.getElementById('imapHost')) {
+                document.getElementById('imapHost').value = emailCfg.imap_host;
+            }
+            if (emailCfg.imap_port && document.getElementById('imapPort')) {
+                document.getElementById('imapPort').value = emailCfg.imap_port;
+            }
+            const activeEmail = emailCfg.email || data.channels.email.emailAddress;
+            if (activeEmail && document.getElementById('imapEmail')) {
+                document.getElementById('imapEmail').value = activeEmail;
+            }
+
+            const noticeEl = document.getElementById('emailSyncStatusNotice');
+            if (noticeEl && data.channels.email.connected) {
+                noticeEl.style.display = 'block';
+                noticeEl.style.background = '#F0FDF4';
+                noticeEl.style.border = '1px solid #BBF7D0';
+                noticeEl.style.color = '#166534';
+                noticeEl.innerHTML = `✓ <strong>Configured:</strong> Connected as <strong>${activeEmail || 'Saved Account'}</strong>. Enter App Password only if changing account.`;
             }
         }
     } catch (err) {
@@ -2997,6 +3120,8 @@ window.checkWhatsAppStatus = async function() {
 };
 
 function updateWhatsAppUI(data) {
+    if (!data) return;
+
     const statusDot = document.getElementById('waStatusDot');
     const statusText = document.getElementById('waStatusText');
     const disconnectBtn = document.getElementById('waDisconnectBtn');
@@ -3009,7 +3134,7 @@ function updateWhatsAppUI(data) {
 
     if (data.status === 'connected') {
         if (statusDot) statusDot.style.backgroundColor = '#10B981';
-        if (statusText) statusText.innerHTML = `Status: <span style="color: #15803D;">Connected (+${data.connectedUser || ''})</span>`;
+        if (statusText) statusText.innerHTML = `Status: <span style="color: #15803D;">Connected (+${data.connectedUser || 'Active'})</span>`;
         if (disconnectBtn) disconnectBtn.style.display = 'inline-flex';
 
         if (qrPlaceholder) qrPlaceholder.style.display = 'none';
@@ -3034,8 +3159,21 @@ function updateWhatsAppUI(data) {
             qrImage.src = data.qr;
             qrImage.style.display = 'block';
         }
+    } else if (data.status === 'connecting') {
+        if (statusDot) statusDot.style.backgroundColor = '#3B82F6';
+        if (statusText) statusText.innerHTML = `Status: <span style="color: #2563EB;">Generating QR Code...</span>`;
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
+
+        if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+        if (connectedNotice) connectedNotice.style.display = 'none';
+        if (qrActive) qrActive.style.display = 'block';
+        if (qrSpinner) {
+            qrSpinner.style.display = 'block';
+            qrSpinner.textContent = 'Initializing secure WhatsApp session... Generating QR Code...';
+        }
+        if (qrImage) qrImage.style.display = 'none';
     } else {
-        // Disconnected or connecting
+        // Disconnected
         if (statusDot) statusDot.style.backgroundColor = '#A1A1AA';
         if (statusText) statusText.innerHTML = `Status: Disconnected`;
         if (disconnectBtn) disconnectBtn.style.display = 'none';
@@ -3053,44 +3191,58 @@ window.requestWhatsAppQr = async function() {
     const qrSpinner = document.getElementById('waQrSpinner');
     const qrImage = document.getElementById('waQrImage');
 
+    if (btn) btn.disabled = true;
+
+    // Show connecting / generating state immediately
     if (qrPlaceholder) qrPlaceholder.style.display = 'none';
     if (qrActive) qrActive.style.display = 'block';
     if (qrSpinner) {
         qrSpinner.style.display = 'block';
-        qrSpinner.textContent = 'Initializing secure WhatsApp session... Generating QR...';
+        qrSpinner.textContent = 'Generating live QR code... Point your WhatsApp scanner here...';
     }
     if (qrImage) qrImage.style.display = 'none';
 
     try {
-        const res = await fetch('/api/whatsapp/qr', { method: 'POST' });
+        const res = await fetch('/api/whatsapp/qr?force=true', { method: 'POST' });
         const data = await res.json();
         updateWhatsAppUI(data);
 
-        // Start auto-poll every 2.5 seconds to detect phone scan
-        if (!window.waStatusPollTimer) {
-            window.waStatusPollTimer = setInterval(async () => {
-                try {
-                    const statusRes = await fetch('/api/whatsapp/status');
-                    const statusData = await statusRes.json();
-                    updateWhatsAppUI(statusData);
-
-                    if (statusData.status === 'connected') {
-                        showToast(`✓ WhatsApp Linked: +${statusData.connectedUser || 'Active'}`);
-                        loadInboxConversations();
-                        fetchInboxStats();
-                    }
-                } catch (e) {}
-            }, 2500);
+        // Clear existing polling timer if any
+        if (window.waStatusPollTimer) {
+            clearInterval(window.waStatusPollTimer);
+            window.waStatusPollTimer = null;
         }
+
+        // Auto-poll every 2.5 seconds to detect when user scans QR on phone
+        window.waStatusPollTimer = setInterval(async () => {
+            try {
+                const statusRes = await fetch('/api/whatsapp/status');
+                const statusData = await statusRes.json();
+                updateWhatsAppUI(statusData);
+
+                if (statusData.status === 'connected') {
+                    showToast(`✓ WhatsApp Linked: +${statusData.connectedUser || 'Active'}`);
+                    loadInboxConversations();
+                    fetchInboxStats();
+                }
+            } catch (e) {}
+        }, 2500);
     } catch (err) {
         showToast('Error requesting WhatsApp QR: ' + err.message);
         if (qrPlaceholder) qrPlaceholder.style.display = 'block';
         if (qrActive) qrActive.style.display = 'none';
+    } finally {
+        if (btn) btn.disabled = false;
     }
 };
 
 window.disconnectWhatsAppSession = async function() {
     if (!confirm('Are you sure you want to unlink and disconnect your WhatsApp?')) return;
+
+    if (window.waStatusPollTimer) {
+        clearInterval(window.waStatusPollTimer);
+        window.waStatusPollTimer = null;
+    }
 
     try {
         const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });

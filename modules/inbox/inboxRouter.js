@@ -225,7 +225,12 @@ router.get('/inbox/channels', async (req, res) => {
             channels: {
                 email: {
                     connected: Boolean(emailConf && emailConf.is_enabled),
-                    emailAddress: emailConf ? (emailConf.config.user || emailConf.config.email) : null
+                    emailAddress: emailConf ? (emailConf.config.user || emailConf.config.email) : null,
+                    config: emailConf ? {
+                        imap_host: emailConf.config.imapHost || emailConf.config.imap_host || 'imap.gmail.com',
+                        imap_port: emailConf.config.imapPort || emailConf.config.imap_port || 993,
+                        email: emailConf.config.email || emailConf.config.user || ''
+                    } : null
                 },
                 whatsapp: {
                     connected: waStatus.status === 'connected',
@@ -267,7 +272,7 @@ router.get('/whatsapp/status', (req, res) => {
 // Trigger / Request QR Code for scanning
 router.post('/whatsapp/qr', async (req, res) => {
     try {
-        const status = await baileysManager.init();
+        const status = await baileysManager.generateQr();
         res.json({ success: true, ...status });
     } catch (err) {
         console.error('Error generating WhatsApp QR:', err);

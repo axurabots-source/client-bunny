@@ -109,13 +109,17 @@
     {
       "milestone": "Module 12: WhatsApp Mobile Native UX (Mobile Viewport)",
       "description": "Separate mobile flow where full-width scrollable chats list is shown first; tapping opens full-screen WhatsApp chat view with back button (←), contact avatar, status, doodle wallpaper, and bottom-anchored composer. Browser back / hardware back button smoothly returns to chats list."
+    },
+    {
+      "milestone": "Module 13: Connection Buttons Verification & Hardening (WhatsApp QR & IMAP Email)",
+      "description": "Fixed WhatsApp Baileys infinite 440 (connectionReplaced) reconnect loop by handling replaced sessions and adding generateQr() that clears stale creds for instant fresh QR generation; fixed missing saveAndSyncEmailChannel() in app.js and added IMAP timeouts to prevent network hangs."
     }
   ],
-  "current_checkpoint": "Resolved mobile inbox scroll clipping: scoped desktop viewport rules to min-width 769px, fixed crm-main height calculation (100dvh - 60px) to prevent bottom nav overlap, added 60px bottom padding to threads list, and eliminated horizontal text overflow.",
+  "current_checkpoint": "Verified and hardened Omnichannel connection buttons: WhatsApp QR code generates reliably on demand without loop or UI flicker; Email IMAP configuration saves with AES-256 encryption and immediately tests sync with user feedback.",
   "next_immediate_steps": [
-    "Test live outbound WhatsApp message delivery from composer directly to contact phone.",
-    "Monitor Render auto-deploy if connected to main branch.",
-    "Proceed to next planned feature or live production verification."
+    "Scan live WhatsApp QR code from phone to establish verified session if unlinked.",
+    "Configure custom IMAP App Password if prospect email replies need to be fetched.",
+    "Monitor unified conversations stream in Omnichannel Inbox."
   ],
   "key_files": {
     "server": "server.js",

@@ -16,6 +16,8 @@ class BaileysManager {
         this.connectedUser = null;
         this.authFolder = path.join(__dirname, '../../auth_whatsapp');
         this.isReconnecting = false;
+        this.reconnectAttempts = 0;
+        this.reconnectTimeout = null;
 
         // Auto-initialize if session credentials already exist on disk
         if (fs.existsSync(path.join(this.authFolder, 'creds.json'))) {
@@ -33,9 +35,66 @@ class BaileysManager {
         };
     }
 
-    async init() {
+    /**
+     * Explicitly generate a fresh QR code for linking a WhatsApp device.
+     * Wipes any stale or replaced credentials so Baileys is forced to enter pairing mode.
+     */
+    async generateQr() {
         if (this.sock && this.status === 'connected') {
             return this.getStatus();
+        }
+
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+        this.reconnectAttempts = 0;
+
+        if (this.sock) {
+            try {
+                this.sock.ev.removeAllListeners();
+                this.sock.end(undefined);
+            } catch (e) {}
+            this.sock = null;
+        }
+
+        // Wipe stale credentials so Baileys produces a brand new pairing QR
+        if (fs.existsSync(this.authFolder)) {
+            try {
+                fs.rmSync(this.authFolder, { recursive: true, force: true });
+            } catch (e) {
+                console.warn('[WhatsApp Baileys] Could not wipe auth folder:', e.message);
+            }
+        }
+
+        this.status = 'connecting';
+        this.currentQr = null;
+        return await this.init(true);
+    }
+
+    async init(forceNew = false) {
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+
+        // If already connected and not forcing new session, return active status
+        if (this.sock && this.status === 'connected' && !forceNew) {
+            return this.getStatus();
+        }
+
+        // If QR already generated and waiting for scan, return existing QR
+        if (this.status === 'qr_ready' && this.currentQr && !forceNew) {
+            return this.getStatus();
+        }
+
+        // Clean up previous socket if exists before creating a new one
+        if (this.sock) {
+            try {
+                this.sock.ev.removeAllListeners();
+                this.sock.end(undefined);
+            } catch (e) {}
+            this.sock = null;
         }
 
         try {
@@ -44,6 +103,7 @@ class BaileysManager {
             }
 
             this.status = 'connecting';
+            this.currentQr = null;
             const { state, saveCreds } = await useMultiFileAuthState(this.authFolder);
 
             this.contacts = {};
@@ -56,6 +116,31 @@ class BaileysManager {
                 syncFullHistory: true,
                 shouldSyncHistoryMessage: () => true,
                 generateHighQualityLinkPreview: true
+            });
+
+            // Set up a promise to wait for initial QR code or connection before returning to caller
+            const initialWaitPromise = new Promise((resolve) => {
+                let resolved = false;
+                const timer = setTimeout(() => {
+                    if (!resolved) {
+                        resolved = true;
+                        resolve(this.getStatus());
+                    }
+                }, 6000);
+
+                const checkReady = () => {
+                    if (!resolved && (this.status === 'qr_ready' || this.status === 'connected')) {
+                        resolved = true;
+                        clearTimeout(timer);
+                        resolve(this.getStatus());
+                    }
+                };
+
+                this.sock.ev.on('connection.update', (u) => {
+                    if (u.qr || u.connection === 'open') {
+                        setTimeout(checkReady, 250);
+                    }
+                });
             });
 
             this.sock.ev.on('creds.update', saveCreds);
@@ -90,29 +175,47 @@ class BaileysManager {
                 if (connection === 'open') {
                     this.status = 'connected';
                     this.currentQr = null;
-                    const jid = this.sock.user ? (this.sock.user.id || '') : '';
+                    this.reconnectAttempts = 0;
+                    if (this.reconnectTimeout) {
+                        clearTimeout(this.reconnectTimeout);
+                        this.reconnectTimeout = null;
+                    }
+                    const jid = this.sock?.user ? (this.sock.user.id || '') : '';
                     this.connectedUser = jid.split(':')[0] || 'Active';
                     console.log(`[WhatsApp Baileys] ✅ Connected as +${this.connectedUser}!`);
                 }
 
                 if (connection === 'close') {
                     const statusCode = (lastDisconnect?.error)?.output?.statusCode;
-                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                    console.log(`[WhatsApp Baileys] Connection closed (code: ${statusCode}, shouldReconnect: ${shouldReconnect})`);
+                    console.log(`[WhatsApp Baileys] Connection closed (code: ${statusCode})`);
 
-                    if (shouldReconnect) {
-                        this.status = 'connecting';
-                        if (!this.isReconnecting) {
-                            this.isReconnecting = true;
-                            setTimeout(() => {
-                                this.isReconnecting = false;
-                                this.init();
-                            }, 4000);
-                        }
-                    } else {
+                    if (statusCode === DisconnectReason.connectionReplaced) {
+                        console.log('[WhatsApp Baileys] Connection replaced by another session/device. Auto-reconnect stopped to prevent loop.');
                         this.status = 'disconnected';
                         this.currentQr = null;
-                        this.connectedUser = null;
+                        this.sock = null;
+                        return;
+                    }
+
+                    if (statusCode === DisconnectReason.loggedOut) {
+                        console.log('[WhatsApp Baileys] Session logged out by WhatsApp. Clearing credentials.');
+                        await this.disconnect();
+                        return;
+                    }
+
+                    // For temporary drops or restartRequired, retry with backoff up to 5 times
+                    if (this.reconnectAttempts < 5) {
+                        this.reconnectAttempts++;
+                        this.status = 'connecting';
+                        const delay = Math.min(3000 * this.reconnectAttempts, 15000);
+                        console.log(`[WhatsApp Baileys] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/5)...`);
+                        this.reconnectTimeout = setTimeout(() => {
+                            this.init();
+                        }, delay);
+                    } else {
+                        console.warn('[WhatsApp Baileys] Max reconnect attempts reached. Resetting status to disconnected.');
+                        this.status = 'disconnected';
+                        this.reconnectAttempts = 0;
                         this.sock = null;
                     }
                 }
@@ -141,7 +244,8 @@ class BaileysManager {
                 }
             });
 
-            return this.getStatus();
+            const initialStatus = await initialWaitPromise;
+            return initialStatus;
         } catch (err) {
             console.error('[WhatsApp Baileys] Failed to initialize session:', err.message);
             this.status = 'disconnected';
@@ -270,9 +374,17 @@ class BaileysManager {
 
     async disconnect() {
         try {
+            if (this.reconnectTimeout) {
+                clearTimeout(this.reconnectTimeout);
+                this.reconnectTimeout = null;
+            }
+            this.reconnectAttempts = 0;
             if (this.sock) {
-                await this.sock.logout().catch(() => {});
-                this.sock.end();
+                try {
+                    this.sock.ev.removeAllListeners();
+                    await this.sock.logout().catch(() => {});
+                    this.sock.end(undefined);
+                } catch (e) {}
                 this.sock = null;
             }
             this.status = 'disconnected';
