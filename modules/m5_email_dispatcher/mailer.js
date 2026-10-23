@@ -117,8 +117,72 @@ async function sendOutreachEmail(config, { leadId, decisionMakerId = null, to, s
     }
 }
 
+/**
+ * Resolve SMTP configuration: uses explicit user input if provided,
+ * or retrieves decrypted credentials from the unified Inbox channel_settings in Supabase.
+ */
+async function resolveSmtpConfig(explicitConfig = null) {
+    if (explicitConfig && explicitConfig.user && explicitConfig.pass) {
+        return {
+            user: explicitConfig.user.trim(),
+            pass: explicitConfig.pass.trim(),
+            host: (explicitConfig.host || 'smtp.gmail.com').trim(),
+            port: parseInt(explicitConfig.port, 10) || 465,
+            secure: explicitConfig.secure !== undefined ? Boolean(explicitConfig.secure) : ((parseInt(explicitConfig.port, 10) || 465) === 465),
+            senderName: explicitConfig.senderName ? explicitConfig.senderName.trim() : ''
+        };
+    }
+
+    try {
+        const { InboxRepository } = require('../inbox/inboxRepository');
+        const emailConf = await InboxRepository.getChannelConfig('email');
+        if (emailConf && emailConf.config) {
+            const c = emailConf.config;
+            const user = (c.user || c.email || '').trim();
+            const pass = (c.decryptedPassword || '').trim();
+
+            if (user && pass) {
+                let host = (c.smtpHost || c.smtp_host || '').trim();
+                let port = parseInt(c.smtpPort || c.smtp_port, 10);
+
+                if (!host) {
+                    const imapHost = (c.imapHost || c.imap_host || 'imap.gmail.com').toLowerCase();
+                    if (imapHost.includes('gmail')) {
+                        host = 'smtp.gmail.com';
+                        port = port || 465;
+                    } else if (imapHost.includes('zoho')) {
+                        host = 'smtp.zoho.com';
+                        port = port || 465;
+                    } else if (imapHost.includes('outlook') || imapHost.includes('office365')) {
+                        host = 'smtp.office365.com';
+                        port = port || 587;
+                    } else {
+                        host = imapHost.replace(/^imap\./i, 'smtp.');
+                        port = port || 465;
+                    }
+                }
+
+                return {
+                    user,
+                    pass,
+                    host: host || 'smtp.gmail.com',
+                    port: port || 465,
+                    secure: port === 465,
+                    senderName: c.senderName || ''
+                };
+            }
+        }
+    } catch (err) {
+        console.warn('[Mailer] Could not resolve unified SMTP config:', err.message);
+    }
+
+    return null;
+}
+
 module.exports = {
     createTransporter,
     verifySmtp,
-    sendOutreachEmail
+    sendOutreachEmail,
+    dispatchColdEmail: sendOutreachEmail,
+    resolveSmtpConfig
 };

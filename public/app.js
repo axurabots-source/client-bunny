@@ -1570,12 +1570,22 @@ function saveSmtpConfig(config) {
     updateEmailStatusBadge();
 }
 
-function updateEmailStatusBadge() {
-    const config = getSmtpConfig();
+async function updateEmailStatusBadge() {
     const dot = document.getElementById('emailStatusDot');
     const badgeText = document.getElementById('emailStatusBadgeText');
     if (!dot || !badgeText) return;
 
+    try {
+        const res = await fetch('/api/inbox/channels');
+        const data = await res.json();
+        if (data.success && data.channels?.email?.connected) {
+            dot.className = 'status-dot connected';
+            badgeText.textContent = data.channels.email.emailAddress || 'Email Connected';
+            return;
+        }
+    } catch (e) {}
+
+    const config = getSmtpConfig();
     if (config.user && config.pass) {
         dot.className = 'status-dot connected';
         badgeText.textContent = config.user;
@@ -1735,28 +1745,20 @@ function initEmailSettings() {
 }
 
 window.openEmailSettingsModal = function() {
-    const config = getSmtpConfig();
-    document.getElementById('smtpSenderName').value = config.senderName || '';
-    document.getElementById('smtpSenderEmail').value = config.user || '';
-    document.getElementById('smtpHost').value = config.host || 'smtp.gmail.com';
-    document.getElementById('smtpPort').value = config.port || 465;
-    document.getElementById('smtpSecure').value = config.secure ? 'true' : 'false';
-    document.getElementById('smtpPass').value = config.pass || '';
-
-    const statusBanner = document.getElementById('smtpTestStatus');
-    if (statusBanner) statusBanner.style.display = 'none';
-
-    document.getElementById('emailSettingsModalOverlay').style.display = 'flex';
+    // Unify directly with Channels Modal Email tab
+    window.openChannelsModal();
+    if (window.switchChannelSettingsTab) window.switchChannelSettingsTab('email');
 };
 
 window.closeEmailSettingsModal = function() {
-    document.getElementById('emailSettingsModalOverlay').style.display = 'none';
+    const modal = document.getElementById('emailSettingsModalOverlay');
+    if (modal) modal.style.display = 'none';
 };
 
 // Current Active Lead for Composer
 let activeComposerLead = null;
 
-window.openEmailComposerModal = function(leadId, prefilledSubject = null, prefilledBody = null) {
+window.openEmailComposerModal = async function(leadId, prefilledSubject = null, prefilledBody = null) {
     const lead = allLeads.find(l => l.id == leadId);
     if (!lead) {
         showToast('Lead details not found.');
@@ -1764,7 +1766,26 @@ window.openEmailComposerModal = function(leadId, prefilledSubject = null, prefil
     }
     activeComposerLead = lead;
 
-    const config = getSmtpConfig();
+    // Check unified channel settings
+    let emailConfigured = false;
+    let senderEmail = '';
+    try {
+        const chanRes = await fetch('/api/inbox/channels');
+        const chanData = await chanRes.json();
+        if (chanData.success && chanData.channels?.email?.connected) {
+            emailConfigured = true;
+            senderEmail = chanData.channels.email.emailAddress || '';
+        }
+    } catch (e) {}
+
+    if (!emailConfigured) {
+        const config = getSmtpConfig();
+        if (config.user && config.pass) {
+            emailConfigured = true;
+            senderEmail = config.user;
+        }
+    }
+
     const warning = document.getElementById('composerSmtpWarning');
     const fromDisplay = document.getElementById('composerFromDisplay');
     const recipientInput = document.getElementById('composerRecipientEmail');
@@ -1772,14 +1793,18 @@ window.openEmailComposerModal = function(leadId, prefilledSubject = null, prefil
     const bodyInput = document.getElementById('composerBody');
     const modalTitle = document.getElementById('composerModalTitle');
 
-    if (!config.user || !config.pass) {
-        warning.style.display = 'block';
-        fromDisplay.textContent = 'Not configured';
-        fromDisplay.style.color = '#EF4444';
+    if (!emailConfigured) {
+        if (warning) warning.style.display = 'block';
+        if (fromDisplay) {
+            fromDisplay.textContent = 'Not configured';
+            fromDisplay.style.color = '#EF4444';
+        }
     } else {
-        warning.style.display = 'none';
-        fromDisplay.textContent = (config.senderName ? config.senderName + ' ' : '') + '<' + config.user + '>';
-        fromDisplay.style.color = '#18181B';
+        if (warning) warning.style.display = 'none';
+        if (fromDisplay) {
+            fromDisplay.textContent = senderEmail ? `<${senderEmail}>` : 'Email Connected';
+            fromDisplay.style.color = '#18181B';
+        }
     }
 
     modalTitle.textContent = 'Send Cold Email to ' + (lead.title || 'Lead');
@@ -1813,7 +1838,7 @@ window.openEmailComposerModal = function(leadId, prefilledSubject = null, prefil
         bodyInput.value = lead.ai_pitch;
     } else {
         const ownerName = (lead.decision_makers && lead.decision_makers[0] && lead.decision_makers[0].full_name) ? lead.decision_makers[0].full_name : 'Team';
-        bodyInput.value = `Hi ${ownerName},\n\nI was looking into ${lead.title} in ${lead.city || 'your area'} and noticed key opportunities to increase your high-intent local customer inquiries.\n\nWould you be open to a quick 3-minute walkthrough showing how we've helped similar businesses scale their client pipeline?\n\nBest regards,\n${config.senderName || 'Growth Team'}`;
+        bodyInput.value = `Hi ${ownerName},\n\nI was looking into ${lead.title} in ${lead.city || 'your area'} and noticed key opportunities to increase your high-intent local customer inquiries.\n\nWould you be open to a quick 3-minute walkthrough showing how we've helped similar businesses scale their client pipeline?\n\nBest regards,\nGrowth Team`;
     }
 
     document.getElementById('emailComposerModalOverlay').style.display = 'flex';
@@ -1826,13 +1851,6 @@ window.closeEmailComposerModal = function() {
 
 async function sendColdEmailSubmit() {
     if (!activeComposerLead) return;
-
-    const config = getSmtpConfig();
-    if (!config.user || !config.pass) {
-        showToast('Please configure your Email Settings first.');
-        openEmailSettingsModal();
-        return;
-    }
 
     const to = document.getElementById('composerRecipientEmail').value.trim();
     const subject = document.getElementById('composerSubject').value.trim();
@@ -1853,15 +1871,16 @@ async function sendColdEmailSubmit() {
 
     const submitBtn = document.getElementById('sendEmailSubmitBtn');
     const submitText = document.getElementById('sendEmailSubmitText');
-    submitBtn.disabled = true;
-    submitText.textContent = 'Sending email...';
+    if (submitBtn) submitBtn.disabled = true;
+    if (submitText) submitText.textContent = 'Sending email...';
 
     try {
+        const config = getSmtpConfig();
         const res = await fetch(`/api/leads/${activeComposerLead.id}/send-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                smtpConfig: config,
+                smtpConfig: (config && config.user && config.pass) ? config : null,
                 to,
                 subject,
                 message,
@@ -1879,19 +1898,22 @@ async function sendColdEmailSubmit() {
             renderLeadsTable();
 
             // If drawer open for this lead, refresh
-            if (leadDrawer.classList.contains('open')) {
+            if (typeof leadDrawer !== 'undefined' && leadDrawer.classList.contains('open')) {
                 fetch(`/api/leads/${activeComposerLead.id}`)
                     .then(r => r.json())
                     .then(d => { if (d.lead) renderDrawerContent(d.lead); });
             }
         } else {
             showToast('❌ Failed: ' + (data.error || 'Could not deliver email.'));
+            if (data.error && data.error.toLowerCase().includes('configure')) {
+                openChannelsModal();
+            }
         }
     } catch (err) {
         showToast('❌ Error sending email: ' + err.message);
     } finally {
-        submitBtn.disabled = false;
-        submitText.textContent = 'Send Cold Email';
+        if (submitBtn) submitBtn.disabled = false;
+        if (submitText) submitText.textContent = 'Send Cold Email';
     }
 }
 

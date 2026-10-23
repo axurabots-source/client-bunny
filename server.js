@@ -121,8 +121,11 @@ app.post(['/api/outreach/send', '/api/leads/:id/send-email'], async (req, res) =
         const leadId = req.params.id || req.body.leadId;
         const { smtpConfig, to, subject, message, decisionMakerId } = req.body;
 
-        if (!smtpConfig || !smtpConfig.user || !smtpConfig.pass) {
-            return res.status(400).json({ success: false, error: 'Please configure your Email Settings before sending.' });
+        const { sendOutreachEmail, resolveSmtpConfig } = require('./modules/m5_email_dispatcher/mailer');
+        const resolvedSmtp = await resolveSmtpConfig(smtpConfig);
+
+        if (!resolvedSmtp) {
+            return res.status(400).json({ success: false, error: 'Please configure your Email Settings in Inbox Channels before sending.' });
         }
         if (!to || !to.includes('@')) {
             return res.status(400).json({ success: false, error: 'Valid recipient email address is required.' });
@@ -135,8 +138,7 @@ app.post(['/api/outreach/send', '/api/leads/:id/send-email'], async (req, res) =
         }
 
         const lead = leadId ? await LeadRepository.getLeadById(leadId) : null;
-        const { sendOutreachEmail } = require('./modules/m5_email_dispatcher/mailer');
-        const sendResult = await sendOutreachEmail(smtpConfig, {
+        const sendResult = await sendOutreachEmail(resolvedSmtp, {
             leadId: lead ? lead.id : null,
             decisionMakerId: decisionMakerId || null,
             to: to.trim(),
@@ -160,60 +162,19 @@ app.post(['/api/outreach/send', '/api/leads/:id/send-email'], async (req, res) =
 app.post('/api/email/test-connection', async (req, res) => {
     try {
         const { smtpConfig } = req.body;
-        if (!smtpConfig || !smtpConfig.user || !smtpConfig.pass) {
+        const { verifySmtp, resolveSmtpConfig } = require('./modules/m5_email_dispatcher/mailer');
+        const resolvedSmtp = await resolveSmtpConfig(smtpConfig);
+
+        if (!resolvedSmtp) {
             return res.status(400).json({ success: false, error: 'Missing SMTP credentials (User and App Password are required).' });
         }
 
-        const { verifySmtp } = require('./modules/m5_email_dispatcher/mailer');
-        await verifySmtp(smtpConfig);
+        await verifySmtp(resolvedSmtp);
 
         res.json({ success: true, message: 'SMTP Connection verified successfully! You are ready to send cold emails.' });
     } catch (err) {
         console.error("SMTP Test Error:", err.message);
         res.status(400).json({ success: false, error: err.message || 'SMTP Handshake failed.' });
-    }
-});
-
-// 3.10. Send Cold Email using User's Frontend Credentials
-app.post('/api/leads/:id/send-email', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { smtpConfig, to, subject, message, decisionMakerId } = req.body;
-
-        if (!smtpConfig || !smtpConfig.user || !smtpConfig.pass) {
-            return res.status(400).json({ success: false, error: 'Please configure your Email Settings before sending.' });
-        }
-        if (!to || !to.includes('@')) {
-            return res.status(400).json({ success: false, error: 'Valid recipient email address is required.' });
-        }
-        if (!subject || !subject.trim()) {
-            return res.status(400).json({ success: false, error: 'Email subject cannot be empty.' });
-        }
-        if (!message || !message.trim()) {
-            return res.status(400).json({ success: false, error: 'Email message body cannot be empty.' });
-        }
-
-        const lead = await LeadRepository.getLeadById(id);
-        if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
-
-        const { sendOutreachEmail } = require('./modules/m5_email_dispatcher/mailer');
-        const sendResult = await sendOutreachEmail(smtpConfig, {
-            leadId: lead.id,
-            decisionMakerId: decisionMakerId || null,
-            to: to.trim(),
-            subject: subject.trim(),
-            bodyText: message.trim()
-        });
-
-        res.json({
-            success: true,
-            message: `Email sent to ${to.trim()} successfully!`,
-            messageId: sendResult.messageId,
-            log: sendResult.log
-        });
-    } catch (err) {
-        console.error("Error sending email:", err);
-        res.status(500).json({ success: false, error: err.message || 'Failed to dispatch email.' });
     }
 });
 

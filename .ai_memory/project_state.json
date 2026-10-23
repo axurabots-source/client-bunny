@@ -113,13 +113,17 @@
     {
       "milestone": "Module 13: Connection Buttons Verification & Hardening (WhatsApp QR & IMAP Email)",
       "description": "Fixed WhatsApp Baileys infinite 440 (connectionReplaced) reconnect loop by handling replaced sessions and adding generateQr() that clears stale creds for instant fresh QR generation; fixed missing saveAndSyncEmailChannel() in app.js and added IMAP timeouts to prevent network hangs."
+    },
+    {
+      "milestone": "Module 14: Unified Email Config & Inbox Outbound Reply Dispatch",
+      "description": "Unified Email configuration across the entire app so Leads cold pitch dispatcher and Omnichannel Inbox share the same AES-256 encrypted SMTP credentials from channel_settings (axurabots@gmail.com). Fixed inbox reply endpoint (/inbox/conversations/:id/reply) to auto-resolve channel credentials and send email replies via SMTP. Verified live email delivery to blinknship@gmail.com."
     }
   ],
-  "current_checkpoint": "Verified and hardened Omnichannel connection buttons: WhatsApp QR code generates reliably on demand without loop or UI flicker; Email IMAP configuration saves with AES-256 encryption and immediately tests sync with user feedback.",
+  "current_checkpoint": "Unified Email configuration across Leads and Inbox channels. Inbox email replies and cold pitches now seamlessly resolve encrypted credentials from channel_settings. Outbound email reply to blinknship@gmail.com verified with active message ID.",
   "next_immediate_steps": [
     "Scan live WhatsApp QR code from phone to establish verified session if unlinked.",
-    "Configure custom IMAP App Password if prospect email replies need to be fetched.",
-    "Monitor unified conversations stream in Omnichannel Inbox."
+    "Monitor unified conversations and replies stream in Omnichannel Inbox.",
+    "Prospect cold email pitching directly uses unified Inbox channel credentials."
   ],
   "key_files": {
     "server": "server.js",

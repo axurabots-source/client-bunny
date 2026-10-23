@@ -99,33 +99,51 @@ router.post('/inbox/conversations/:id/reply', async (req, res) => {
 
         if (channel === 'email') {
             const recipient = recipientEmail || conversation.contact_identifier;
-            const subject = conversation.subject ? `Re: ${conversation.subject.replace(/^Re:\s*/i, '')}` : 'Follow up from Client Bunny';
+            if (!recipient || !recipient.includes('@')) {
+                return res.status(400).json({ success: false, error: 'Invalid recipient email address for conversation.' });
+            }
+            const subject = conversation.subject ? (conversation.subject.toLowerCase().startsWith('re:') ? conversation.subject : `Re: ${conversation.subject}`) : 'Follow up from Client Bunny';
 
-            // Send via email dispatcher if SMTP configured
+            // Resolve SMTP credentials from unified Inbox channel_settings in Supabase
+            const { sendOutreachEmail, resolveSmtpConfig } = require('../m5_email_dispatcher/mailer');
+            const resolvedSmtp = await resolveSmtpConfig(smtpConfig);
+
+            if (!resolvedSmtp) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Email channel is not configured. Please open Channels and configure your Email & App Password first.'
+                });
+            }
+
             let emailSendResult = null;
-            if (smtpConfig && smtpConfig.user && smtpConfig.pass) {
-                try {
-                    emailSendResult = await dispatchColdEmail({
-                        smtpConfig,
-                        recipientEmail: recipient,
-                        subject,
-                        bodyText: fullMessageBody
-                    });
-                } catch (emailErr) {
-                    console.error('Outbound email error:', emailErr);
-                }
+            try {
+                emailSendResult = await sendOutreachEmail(resolvedSmtp, {
+                    leadId: conversation.lead_id,
+                    to: recipient,
+                    subject,
+                    bodyText: fullMessageBody
+                });
+                console.log(`[Inbox Reply] Outbound email delivered to ${recipient} (Message ID: ${emailSendResult.messageId})`);
+            } catch (emailErr) {
+                console.error('[Inbox Reply] Outbound email failed:', emailErr.message);
+                return res.status(500).json({
+                    success: false,
+                    error: `Failed to deliver email: ${emailErr.message}`
+                });
             }
 
             outboundMsg = await InboxRepository.recordOutboundMessage({
                 conversationId,
                 leadId: conversation.lead_id,
                 channel: 'email',
-                sender: (smtpConfig && smtpConfig.user) ? smtpConfig.user : 'Me',
+                sender: resolvedSmtp.user || 'Me',
                 recipient,
                 subject,
                 body: fullMessageBody,
                 rawPayload: emailSendResult
             });
+
+            return res.json({ success: true, message: outboundMsg });
 
         } else if (channel === 'whatsapp') {
             const phone = conversation.contact_identifier || (conversation.lead_phone);
