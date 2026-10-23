@@ -111,7 +111,7 @@
       "description": "Separate mobile flow where full-width scrollable chats list is shown first; tapping opens full-screen WhatsApp chat view with back button (←), contact avatar, status, doodle wallpaper, and bottom-anchored composer. Browser back / hardware back button smoothly returns to chats list."
     }
   ],
-  "current_checkpoint": "All recent updates (Omnichannel Inbox, WhatsApp Baileys QR sync, ManyChat Instagram DMs, WhatsApp Mobile native UX, and persistent AI Memory Ledger) successfully committed (d3c1f92) and pushed to GitHub main branch.",
+  "current_checkpoint": "Resolved mobile inbox scroll clipping: scoped desktop viewport rules to min-width 769px, fixed crm-main height calculation (100dvh - 60px) to prevent bottom nav overlap, added 60px bottom padding to threads list, and eliminated horizontal text overflow.",
   "next_immediate_steps": [
     "Test live outbound WhatsApp message delivery from composer directly to contact phone.",
     "Monitor Render auto-deploy if connected to main branch.",

@@ -1741,32 +1741,43 @@ body.crm-body.sidebar-collapsed .crm-main {
    MODULE 10: OMNICHANNEL UNIFIED INBOX (WHATSAPP WEB PC DESKTOP)
    ========================================================== */
 
-/* Locked viewport mode for WhatsApp Desktop experience */
-body.inbox-mode {
-    height: 100vh !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
-}
+/* Locked viewport mode for WhatsApp Desktop experience (PC / Tablet) */
+@media (min-width: 769px) {
+    body.inbox-mode {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+    }
 
-body.inbox-mode .crm-main {
-    height: 100vh !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
-}
+    body.inbox-mode .crm-main {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding: 0 !important;
+    }
 
-#screenInbox {
-    height: calc(100vh - 64px);
-    max-height: calc(100vh - 64px);
-    overflow: hidden !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100%;
-    display: none;
-}
+    body.inbox-mode .app-header {
+        flex-shrink: 0 !important;
+    }
 
-#screenInbox.active {
-    display: flex !important;
-    flex-direction: column !important;
+    #screenInbox {
+        flex: 1 !important;
+        min-height: 0 !important;
+        height: calc(100vh - 64px) !important;
+        max-height: calc(100vh - 64px) !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100%;
+        display: none;
+    }
+
+    #screenInbox.active {
+        display: flex !important;
+        flex-direction: column !important;
+    }
 }
 
 /* Edge-to-edge container matching WhatsApp Web */
@@ -3114,40 +3125,75 @@ body.crm-body.mobile-nav-open .sidebar-backdrop {
        ========================================================= */
     body.inbox-mode {
         overflow: hidden !important;
-        height: 100vh;
-        height: 100dvh;
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100vh !important;
+        max-height: 100dvh !important;
+        width: 100vw !important;
     }
 
-    body.inbox-mode .crm-main {
+    /* Chats List Screen (when chat is not open) */
+    body.inbox-mode:not(.mobile-inbox-open) .crm-main {
         overflow: hidden !important;
-        height: calc(100vh - 56px - 60px);
-        height: calc(100dvh - 56px - 60px);
+        display: flex !important;
+        flex-direction: column !important;
+        height: calc(100vh - 60px) !important;
+        height: calc(100dvh - 60px) !important;
+        max-height: calc(100vh - 60px) !important;
+        max-height: calc(100dvh - 60px) !important;
         padding: 0 !important;
+        margin: 0 !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
     }
 
-    #screenInbox {
-        height: 100% !important;
-        overflow: hidden !important;
-        position: relative !important;
-        background: #EFEAE2 !important;
+    body.inbox-mode:not(.mobile-inbox-open) .app-header {
+        height: 56px !important;
+        flex-shrink: 0 !important;
+        border-bottom: 1px solid #E5E7EB !important;
     }
 
-    .inbox-container {
-        grid-template-columns: 1fr !important;
-        height: 100% !important;
+    body.inbox-mode:not(.mobile-inbox-open) #screenInbox {
+        flex: 1 1 auto !important;
         min-height: 0 !important;
-        position: relative !important;
+        height: calc(100% - 56px) !important;
+        max-height: none !important;
         overflow: hidden !important;
+        position: relative !important;
+        background: #FFFFFF !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
     }
 
-    /* Screen 1: Mobile Chats List Screen (Active when chat is not open) */
+    body.inbox-mode:not(.mobile-inbox-open) #screenInbox.active {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    body.inbox-mode:not(.mobile-inbox-open) .inbox-container {
+        display: flex !important;
+        flex-direction: column !important;
+        grid-template-columns: 1fr !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        position: relative !important;
+        overflow: hidden !important;
+        background: #FFFFFF !important;
+    }
+
+    /* Screen 1: Mobile Chats List Screen */
     .inbox-list-pane {
         width: 100% !important;
         height: 100% !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
         display: flex !important;
         flex-direction: column !important;
         border-right: none !important;
         background: #FFFFFF !important;
+        overflow: hidden !important;
     }
 
     .inbox-list-header {
@@ -3202,18 +3248,28 @@ body.crm-body.mobile-nav-open .sidebar-backdrop {
     }
 
     .inbox-threads-list {
-        flex: 1;
-        height: 100%;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        height: 100% !important;
         overflow-y: auto !important;
-        -webkit-overflow-scrolling: touch;
-        background: #FFFFFF;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-y: contain !important;
+        padding: 0 0 60px 0 !important; /* Critical 60px padding ensures bottom chats are NEVER hidden under nav */
+        background: #FFFFFF !important;
     }
 
     .thread-item {
-        padding: 12px 14px;
-        min-height: 72px;
-        border-bottom: 1px solid #F3F4F6;
-        cursor: pointer;
+        padding: 12px 14px !important;
+        min-height: 72px !important;
+        border-bottom: 1px solid #F3F4F6 !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 12px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
         -webkit-tap-highlight-color: rgba(0, 0, 0, 0.05);
     }
 
@@ -3222,25 +3278,80 @@ body.crm-body.mobile-nav-open .sidebar-backdrop {
     }
 
     .thread-avatar {
-        width: 48px;
-        height: 48px;
-        font-size: 15px;
+        width: 48px !important;
+        height: 48px !important;
+        font-size: 15px !important;
+        flex-shrink: 0 !important;
     }
 
     .thread-channel-dot {
-        width: 17px;
-        height: 17px;
-        font-size: 9px;
+        width: 17px !important;
+        height: 17px !important;
+        font-size: 9px !important;
+    }
+
+    .thread-body {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 2px !important;
+        overflow: hidden !important;
+    }
+
+    .thread-top {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: baseline !important;
+        gap: 8px !important;
+        width: 100% !important;
     }
 
     .thread-name {
-        font-size: 15.5px;
-        color: #111827;
+        font-size: 15.5px !important;
+        font-weight: 600 !important;
+        color: #111827 !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+    }
+
+    .thread-time {
+        font-size: 11.5px !important;
+        color: #6B7280 !important;
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+    }
+
+    .thread-delete-btn {
+        display: none !important;
+    }
+
+    .thread-sub-row {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        overflow: hidden !important;
+    }
+
+    .thread-preview-row {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+        width: 100% !important;
     }
 
     .thread-preview {
-        font-size: 13.5px;
-        color: #4B5563;
+        font-size: 13.5px !important;
+        color: #4B5563 !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+        flex: 1 !important;
+        min-width: 0 !important;
     }
 
     /* Screen 2: Single Chat Screen (Hidden by default on mobile until user clicks a chat) */
