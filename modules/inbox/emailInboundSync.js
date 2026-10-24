@@ -111,54 +111,59 @@ class EmailInboundSync {
                         }
                     } catch (_) {}
 
-                    // Phase 2: Download full body source ONLY for genuinely new emails!
-                    for (const uid of uidsToDownload) {
+                    // Phase 2: Download full body source in batch ONLY for genuinely new emails!
+                    if (uidsToDownload.length > 0) {
                         try {
-                            for await (const msg of client.fetch(String(uid), { source: true, envelope: true }, { uid: true })) {
-                                const parsed = await simpleParser(msg.source);
-                                const senderObj = (parsed.from && parsed.from.value && parsed.from.value[0]) ? parsed.from.value[0] : null;
-                                let senderEmail = senderObj ? senderObj.address : (parsed.from ? parsed.from.text : '');
-                                const emailMatch = senderEmail.match(/[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}/);
-                                if (emailMatch) senderEmail = emailMatch[0].toLowerCase();
+                            const uidsQuery = uidsToDownload.join(',');
+                            for await (const msg of client.fetch(uidsQuery, { source: true, envelope: true }, { uid: true })) {
+                                try {
+                                    const parsed = await simpleParser(msg.source);
+                                    const senderObj = (parsed.from && parsed.from.value && parsed.from.value[0]) ? parsed.from.value[0] : null;
+                                    let senderEmail = senderObj ? senderObj.address : (parsed.from ? parsed.from.text : '');
+                                    const emailMatch = senderEmail.match(/[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}/);
+                                    if (emailMatch) senderEmail = emailMatch[0].toLowerCase();
 
-                                const senderName = senderObj ? senderObj.name : (envelopeMeta.get(uid)?.from?.[0]?.name || senderEmail);
-                                const subject = parsed.subject || envelopeMeta.get(uid)?.subject || '(No Subject)';
-                                const body = parsed.text || parsed.html || '';
-                                const messageDate = parsed.date || envelopeMeta.get(uid)?.date || new Date();
+                                    const senderName = senderObj ? senderObj.name : (envelopeMeta.get(msg.uid)?.from?.[0]?.name || senderEmail);
+                                    const subject = parsed.subject || envelopeMeta.get(msg.uid)?.subject || '(No Subject)';
+                                    const body = parsed.text || parsed.html || '';
+                                    const messageDate = parsed.date || envelopeMeta.get(msg.uid)?.date || new Date();
 
-                                if (senderEmail && senderEmail !== user.toLowerCase()) {
-                                    const recordResult = await InboxRepository.recordInboundMessage({
-                                        channel: 'email',
-                                        sender: senderEmail,
-                                        recipient: user,
-                                        subject,
-                                        body: body.trim(),
-                                        senderName: senderName || senderEmail,
-                                        rawPayload: {
-                                            messageId: parsed.messageId || msg.envelope?.messageId,
-                                            inReplyTo: parsed.inReplyTo,
-                                            references: parsed.references
-                                        },
-                                        timestamp: messageDate
-                                    });
-
-                                    if (!recordResult.skipped) {
-                                        syncedCount++;
-                                        if (recordResult.matchedLead) {
-                                            matchedCount++;
-                                        }
-
-                                        processedMessages.push({
-                                            id: recordResult.message ? recordResult.message.id : recordResult.conversationId,
-                                            from: senderEmail,
+                                    if (senderEmail && senderEmail !== user.toLowerCase()) {
+                                        const recordResult = await InboxRepository.recordInboundMessage({
+                                            channel: 'email',
+                                            sender: senderEmail,
+                                            recipient: user,
                                             subject,
-                                            matchedLead: recordResult.matchedLead ? recordResult.matchedLead.title : null
+                                            body: body.trim(),
+                                            senderName: senderName || senderEmail,
+                                            rawPayload: {
+                                                messageId: parsed.messageId || msg.envelope?.messageId,
+                                                inReplyTo: parsed.inReplyTo,
+                                                references: parsed.references
+                                            },
+                                            timestamp: messageDate
                                         });
+
+                                        if (!recordResult.skipped) {
+                                            syncedCount++;
+                                            if (recordResult.matchedLead) {
+                                                matchedCount++;
+                                            }
+
+                                            processedMessages.push({
+                                                id: recordResult.message ? recordResult.message.id : recordResult.conversationId,
+                                                from: senderEmail,
+                                                subject,
+                                                matchedLead: recordResult.matchedLead ? recordResult.matchedLead.title : null
+                                            });
+                                        }
                                     }
+                                } catch (parseErr) {
+                                    console.error(`[EmailSync] Error parsing email UID ${msg.uid}:`, parseErr.message);
                                 }
                             }
-                        } catch (parseErr) {
-                            console.error(`[EmailSync] Error parsing email UID ${uid}:`, parseErr.message);
+                        } catch (batchErr) {
+                            console.error('[EmailSync] Batch IMAP fetch error:', batchErr.message);
                         }
                     }
                 }

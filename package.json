@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch-path=server.js --watch-path=modules --watch-path=public server.js"
+    "dev": "node --watch-path=server.js server.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc14",

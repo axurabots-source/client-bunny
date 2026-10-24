@@ -2141,6 +2141,7 @@ window.fetchInboxStats = async function() {
 
 // Load conversations list with scroll preservation & change detection
 let lastThreadsHash = '';
+let lastThreadsCount = 0;
 
 window.loadInboxConversations = async function(silent = false) {
     const listEl = document.getElementById('inboxThreadsList');
@@ -2158,12 +2159,13 @@ window.loadInboxConversations = async function(silent = false) {
         if (data.success) {
             allInboxConversations = data.conversations || [];
             
-            // Check if thread data changed
-            const currentHash = allInboxConversations.map(c => `${c.id}:${c.last_message_at}:${c.unread_count}`).join('|');
-            if (silent && currentHash === lastThreadsHash) {
+            // Check if thread data changed (ID, timestamp, unread, preview, total count)
+            const currentHash = allInboxConversations.map(c => `${c.id}:${c.last_message_at}:${c.unread_count}:${c.last_message_preview}`).join('|');
+            if (silent && currentHash === lastThreadsHash && allInboxConversations.length === lastThreadsCount) {
                 return; // Content unchanged, avoid DOM rewrite and scroll reset
             }
             lastThreadsHash = currentHash;
+            lastThreadsCount = allInboxConversations.length;
             renderInboxThreads(silent);
         } else {
             if (!silent) listEl.innerHTML = `<div style="padding: 20px; font-size: 13px; color: #DC2626; text-align: center;">Error loading chats: ${escapeHtml(data.error || 'Server error')}</div>`;
@@ -2221,7 +2223,7 @@ function renderInboxThreads(preserveScroll = false) {
     }
 
     listEl.innerHTML = filtered.map(c => {
-        const isActive = c.id === activeConversationId;
+        const isActive = String(c.id) === String(activeConversationId);
         const channel = (c.channel || 'whatsapp').toLowerCase();
         const avatarClass = channel === 'whatsapp' ? 'avatar-whatsapp' : channel === 'instagram' ? 'avatar-instagram' : 'avatar-email';
         const dotClass = channel === 'whatsapp' ? 'dot-whatsapp' : channel === 'instagram' ? 'dot-instagram' : 'dot-email';
@@ -2573,9 +2575,16 @@ function renderChatMessages(messages, conv, forceScrollBottom = false) {
 
     container.innerHTML = html;
 
-    // Scroll down if forced, on first load, or if user was already at the bottom
+    // Track state on dataset so real-time poller can accurately detect newly arrived messages
+    const lastMsg = messages[messages.length - 1];
+    container.dataset.lastMessageId = String(lastMsg?.id || '');
+    container.dataset.messageCount = String(messages.length);
+
+    // Scroll down if forced, on first load, or if user was already near the bottom
     if (forceScrollBottom || isFirstLoad || wasNearBottom) {
-        container.scrollTop = container.scrollHeight;
+        requestAnimationFrame(() => {
+            container.scrollTop = container.scrollHeight;
+        });
     }
 }
 
@@ -2745,32 +2754,10 @@ window.sendActiveChatReply = async function() {
         if (data.success) {
             showToast('✓ Reply dispatched successfully!');
 
-            // Optimistically append outbound bubble
-            const container = document.getElementById('chatMessagesContainer');
-            if (container) {
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const fullOutboundText = mediaUrl ? `![Photo](${mediaUrl})\n${messageText}`.trim() : messageText;
-                const bubbleHtml = `
-                    <div class="chat-bubble-row outbound">
-                        <div class="chat-bubble outbound">
-                            <div class="chat-msg-text">${formatChatMessageBody(fullOutboundText)}</div>
-                            <div class="chat-msg-meta">
-                                <span class="chat-msg-time">${timeStr}</span>
-                                <span class="chat-checkmarks" title="Delivered">✓✓</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                container.insertAdjacentHTML('beforeend', bubbleHtml);
-                container.scrollTop = container.scrollHeight;
-                if (data.message?.id) {
-                    container.dataset.lastMessageId = String(data.message.id);
-                }
-            }
-
+            // Immediately refresh active conversation from server to confirm receipt & render real message
+            await openConversation(activeConversationId, true);
             // Refresh conversations list in background
-            loadInboxConversations(true);
+            await loadInboxConversations(true);
         } else {
             // Restore message text back into input on failure
             input.value = messageText;
@@ -2841,7 +2828,7 @@ if (document.readyState === 'loading') {
     initChatInputHandlers();
 }
 
-// Real-time silent poller for Unified Inbox (every 4 seconds when inbox screen is open)
+// Real-time silent poller for Unified Inbox (every 3 seconds when inbox screen is open)
 if (window.inboxPollTimer) clearInterval(window.inboxPollTimer);
 window.inboxPollTimer = setInterval(async () => {
     if (typeof currentScreen !== 'undefined' && currentScreen === 'inbox') {
@@ -2854,13 +2841,13 @@ window.inboxPollTimer = setInterval(async () => {
                     const conv = data.conversation;
                     const msgs = conv.messages || [];
                     const container = document.getElementById('chatMessagesContainer');
-                    const currentBubbleCount = container ? container.querySelectorAll('.chat-bubble-row').length : 0;
-                    const latestMsgId = msgs.length > 0 ? String(msgs[msgs.length - 1].id) : '';
                     const lastRenderedId = container ? (container.dataset.lastMessageId || '') : '';
+                    const lastBubbleCount = container ? parseInt(container.dataset.messageCount || '0', 10) : 0;
+                    const latestMsgId = msgs.length > 0 ? String(msgs[msgs.length - 1].id) : '';
 
-                    if (msgs.length !== currentBubbleCount || latestMsgId !== lastRenderedId) {
-                        renderChatMessages(msgs, conv, false);
-                        if (container) container.dataset.lastMessageId = latestMsgId;
+                    if (msgs.length !== lastBubbleCount || (latestMsgId && latestMsgId !== lastRenderedId)) {
+                        const hasNewInbound = msgs.length > lastBubbleCount;
+                        renderChatMessages(msgs, conv, hasNewInbound);
                     }
                 }
             } catch (e) {}
