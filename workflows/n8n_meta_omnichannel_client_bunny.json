@@ -1,0 +1,109 @@
+{
+  "name": "Client Bunny - Meta Omnichannel Hub (Instagram & Facebook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meta-omnichannel-inbound",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "1e7b9932-8df2-4e4a-9ef1-3d711a8b5e21",
+      "name": "Webhook Inbound (Meta / Instagram)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        240
+      ],
+      "webhookId": "client-bunny-meta-inbound"
+    },
+    {
+      "parameters": {
+        "object": "page",
+        "fields": "messages,messaging_postbacks"
+      },
+      "id": "4d8e2265-1ab5-4b7d-8bc4-6e044d1e8b54",
+      "name": "Facebook & Instagram Trigger",
+      "type": "n8n-nodes-base.facebookTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalizes incoming Instagram or Facebook message for Client Bunny\nconst raw = $input.first().json;\nconst body = raw.body || raw;\n\n// 1. Detect Channel (Facebook Messenger vs Instagram DM)\nlet channel = 'instagram';\nif (body.object === 'page' || body.channel === 'facebook' || body.facebook_id || (body.entry && body.entry[0]?.messaging && !body.instagram_username)) {\n  channel = 'facebook';\n}\n\n// 2. Extract Sender & Identity\nlet senderId = 'prospect';\nlet senderName = 'Prospect';\nlet messageText = '[Message]';\n\nif (body.entry && Array.isArray(body.entry) && body.entry[0]?.messaging) {\n  // Standard Meta Graph API format\n  const event = body.entry[0].messaging[0];\n  senderId = event.sender?.id || 'fb_user';\n  senderName = channel === 'facebook' ? `FB User ${senderId.slice(-4)}` : `@user_${senderId.slice(-4)}`;\n  messageText = event.message?.text || '[Attachment/Media]';\n} else {\n  // Direct / webhook payload format\n  senderId = body.instagram_username || body.username || body.sender_id || body.user_id || body.id || (channel === 'facebook' ? 'fb_user' : 'ig_user');\n  senderName = [body.first_name, body.last_name].filter(Boolean).join(' ') || body.name || (channel === 'instagram' ? `@${senderId}` : `FB User ${senderId}`);\n  messageText = body.message || body.text || body.body || '[Direct Message]';\n}\n\nreturn [{\n  json: {\n    channel: channel,\n    senderId: senderId,\n    instagram_username: senderId,\n    facebook_id: senderId,\n    first_name: senderName,\n    name: senderName,\n    message: messageText,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "2b8c0043-9ef3-4f5b-8fa2-4e822b9c6f32",
+      "name": "Smart Meta Normalizer (FB + IG)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/webhooks/manychat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "3c9d1154-0fa4-4a6c-9ab3-5f933c0d7a43",
+      "name": "Forward to Client Bunny Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        340
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Inbound (Meta / Instagram)": {
+      "main": [
+        [
+          {
+            "node": "Smart Meta Normalizer (FB + IG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook & Instagram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Smart Meta Normalizer (FB + IG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Smart Meta Normalizer (FB + IG)": {
+      "main": [
+        [
+          {
+            "node": "Forward to Client Bunny Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

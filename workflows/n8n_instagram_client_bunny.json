@@ -1,0 +1,86 @@
+{
+  "name": "Client Bunny - Instagram DM to Unified Inbox",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram-inbound",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "1e7b9932-8df2-4e4a-9ef1-3d711a8b5e21",
+      "name": "Instagram Inbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "client-bunny-instagram-inbound"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalizes incoming Instagram message data for Client Bunny\nconst body = $input.first().json.body || $input.first().json;\n\n// Handle both Meta Graph API format and generic webhook payloads\nlet senderId = body.instagram_username || body.username || (body.entry && body.entry[0]?.messaging && body.entry[0].messaging[0]?.sender?.id) || 'instagram_user';\nlet senderName = body.first_name || body.name || `@${senderId}`;\nlet messageText = body.message || body.text || (body.entry && body.entry[0]?.messaging && body.entry[0].messaging[0]?.message?.text) || '[Instagram DM]';\n\nreturn [{\n  json: {\n    channel: 'instagram',\n    instagram_username: senderId,\n    first_name: senderName,\n    message: messageText,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "2b8c0043-9ef3-4f5b-8fa2-4e822b9c6f32",
+      "name": "Format For Client Bunny",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/webhooks/manychat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "3c9d1154-0fa4-4a6c-9ab3-5f933c0d7a43",
+      "name": "Forward to Client Bunny Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Instagram Inbound Webhook": {
+      "main": [
+        [
+          {
+            "node": "Format For Client Bunny",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format For Client Bunny": {
+      "main": [
+        [
+          {
+            "node": "Forward to Client Bunny Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b1e2c3d4-e5f6-7890-abcd-ef1234567890",
+  "id": "client_bunny_ig_flow",
+  "tags": []
+}

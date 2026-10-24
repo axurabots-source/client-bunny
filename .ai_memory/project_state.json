@@ -134,13 +134,18 @@
     {
       "milestone": "Module 18: SMTP Connection Pooling, 12s IMAP Polling & Custom Subject Line",
       "description": "Accelerated outbound email dispatch to ~1.5s using a pooled keepalive SMTP transporter (pool: true, maxConnections: 3), eliminating repetitive TLS handshakes. Accelerated IMAP envelope checks by replacing sequential Supabase queries with single batch ANY($1::text[]) mid checks and tightened polling to 12s. Added custom editable email subject line bar in Omnichannel Inbox composer (shown only for email channels, hidden for WhatsApp/IG), updating thread subjects in database upon dispatch."
+    },
+    {
+      "milestone": "Module 19: n8n Meta Omnichannel Bridge (Instagram & Facebook Messenger)",
+      "description": "Discovered and booted user's local n8n instance (v2.37.10 on port 5678). Enhanced metaReceiver.js with dynamic multi-channel support (auto-detecting facebook vs instagram). Authored and verified n8n workflows (workflows/n8n_instagram_client_bunny.json and workflows/n8n_meta_omnichannel_client_bunny.json) with normalizer code and forwarder to http://localhost:3000/api/webhooks/manychat. Successfully executed and verified end-to-end inbound delivery into Supabase messages (ID 312). Clarified Meta Developer 'Development Mode' policy bypassing legal business verification for self-hosted apps."
     }
   ],
-  "current_checkpoint": "Omnichannel Inbox high-speed email pipeline active. Outbound dispatch takes ~1.5s via warm pooled SMTP connection, incoming IMAP checks run in ~5s with 12s automated intervals, and users can specify or edit custom email subject lines directly in the chat composer.",
+  "current_checkpoint": "Meta Omnichannel pipeline established via local n8n engine and metaReceiver.js. Inbound Instagram/Facebook messages map seamlessly to Client Bunny Unified Inbox. Email pipeline operates with connection pooling and custom subject editing. WhatsApp Baileys remains active.",
   "next_immediate_steps": [
-    "Verify live inbox composer UI shows Subject bar when Email conversation is open.",
-    "Verify subject bar changes persist and reflect in delivered recipient inbox.",
-    "WhatsApp live session active (+92 329 1866966)."
+    "Publish n8n workflow for continuous background listening on port 5678.",
+    "Decide between Meta Development Mode App ID for direct polling or n8n webhook tunnel.",
+    "WhatsApp live session active (+92 329 1866966).",
+    "Monitor real-time dual-pane Omnichannel Inbox performance across all 3 channels."
   ],
   "key_files": {
     "server": "server.js",
@@ -151,6 +156,7 @@
     "inbox_router": "modules/inbox/inboxRouter.js",
     "inbox_repo": "modules/inbox/inboxRepository.js",
     "meta_receiver": "modules/inbox/metaReceiver.js",
-    "db_schema": "schema_supabase.sql"
+    "db_schema": "schema_supabase.sql",
+    "n8n_workflow": "workflows/n8n_meta_omnichannel_client_bunny.json"
   }
 }
