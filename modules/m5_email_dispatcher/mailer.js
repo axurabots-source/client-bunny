@@ -37,7 +37,7 @@ async function verifySmtp(config) {
 /**
  * Send an outreach cold email and record it into Supabase outreach_logs
  */
-async function sendOutreachEmail(config, { leadId, decisionMakerId = null, to, subject, bodyText, bodyHtml }) {
+async function sendOutreachEmail(config, { leadId, decisionMakerId = null, to, subject, bodyText, bodyHtml, inReplyTo = null, references = null }) {
     if (!to || !to.includes('@')) {
         throw new Error("Invalid recipient email address.");
     }
@@ -63,6 +63,11 @@ async function sendOutreachEmail(config, { leadId, decisionMakerId = null, to, s
         text: textContent,
         html: htmlContent
     };
+
+    if (inReplyTo) {
+        mailOptions.inReplyTo = inReplyTo;
+        mailOptions.references = references || inReplyTo;
+    }
 
     try {
         console.log(`📤 Dispatching cold email to ${to} via ${config.host || 'smtp.gmail.com'}...`);

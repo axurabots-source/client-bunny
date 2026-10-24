@@ -2673,8 +2673,13 @@ window.filterInboxChannel = function(channel, btn) {
     loadInboxConversations();
 };
 
-// Send reply in active conversation
+// Send reply in active conversation with strict single-execution mutex lock
 window.sendActiveChatReply = async function() {
+    if (window.isSendingChatReply) {
+        console.warn('[Inbox] Send already in progress, ignoring duplicate trigger.');
+        return;
+    }
+
     if (!activeConversationId) {
         showToast('Please select a conversation first.');
         return;
@@ -2691,21 +2696,31 @@ window.sendActiveChatReply = async function() {
         return;
     }
 
+    // Acquire lock and disable send button immediately
+    window.isSendingChatReply = true;
     if (sendBtn) {
         sendBtn.disabled = true;
         sendBtn.innerHTML = '<span>Sending...</span>';
     }
 
+    // Immediately clear input to prevent double Enter/click submission
+    input.value = '';
+    if (window.autoResizeChatInput) window.autoResizeChatInput(input);
+
+    const attachmentCopy = activeChatAttachment;
+    // Clear attachment preview immediately
+    removeChatAttachment();
+
     try {
         let mediaUrl = null;
-        if (activeChatAttachment) {
+        if (attachmentCopy) {
             try {
                 const uploadRes = await fetch('/api/inbox/upload', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        filename: activeChatAttachment.filename,
-                        base64: activeChatAttachment.base64
+                        filename: attachmentCopy.filename,
+                        base64: attachmentCopy.base64
                     })
                 });
                 const uploadData = await uploadRes.json();
@@ -2729,8 +2744,6 @@ window.sendActiveChatReply = async function() {
         const data = await res.json();
         if (data.success) {
             showToast('✓ Reply dispatched successfully!');
-            input.value = '';
-            if (window.autoResizeChatInput) window.autoResizeChatInput(input);
 
             // Optimistically append outbound bubble
             const container = document.getElementById('chatMessagesContainer');
@@ -2751,19 +2764,26 @@ window.sendActiveChatReply = async function() {
                 `;
                 container.insertAdjacentHTML('beforeend', bubbleHtml);
                 container.scrollTop = container.scrollHeight;
+                if (data.message?.id) {
+                    container.dataset.lastMessageId = String(data.message.id);
+                }
             }
 
-            // Clear attachment preview
-            removeChatAttachment();
-
-            // Refresh list in background
+            // Refresh conversations list in background
             loadInboxConversations(true);
         } else {
+            // Restore message text back into input on failure
+            input.value = messageText;
+            if (window.autoResizeChatInput) window.autoResizeChatInput(input);
             showToast('Reply failed: ' + (data.error || 'Server error'));
         }
     } catch (err) {
+        // Restore message text back into input on failure
+        input.value = messageText;
+        if (window.autoResizeChatInput) window.autoResizeChatInput(input);
         showToast('Network error sending reply: ' + err.message);
     } finally {
+        window.isSendingChatReply = false;
         if (sendBtn) {
             sendBtn.disabled = false;
             sendBtn.innerHTML = `
@@ -2835,15 +2855,25 @@ window.inboxPollTimer = setInterval(async () => {
                     const msgs = conv.messages || [];
                     const container = document.getElementById('chatMessagesContainer');
                     const currentBubbleCount = container ? container.querySelectorAll('.chat-bubble-row').length : 0;
-                    if (msgs.length !== currentBubbleCount) {
+                    const latestMsgId = msgs.length > 0 ? String(msgs[msgs.length - 1].id) : '';
+                    const lastRenderedId = container ? (container.dataset.lastMessageId || '') : '';
+
+                    if (msgs.length !== currentBubbleCount || latestMsgId !== lastRenderedId) {
                         renderChatMessages(msgs, conv, false);
+                        if (container) container.dataset.lastMessageId = latestMsgId;
                     }
                 }
             } catch (e) {}
         }
         fetchInboxStats();
     }
-}, 4000);
+}, 3000);
+
+// Global background poller for inbox badges across all screens (every 10s)
+if (window.globalStatsTimer) clearInterval(window.globalStatsTimer);
+window.globalStatsTimer = setInterval(() => {
+    if (typeof fetchInboxStats === 'function') fetchInboxStats();
+}, 10000);
 
 // AI Suggest contextual reply
 window.suggestAIReplyForCurrentChat = async function() {
@@ -3350,16 +3380,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchInput) {
         searchInput.addEventListener('input', () => {
             renderInboxThreads();
-        });
-    }
-
-    const replyTextarea = document.getElementById('chatReplyInput');
-    if (replyTextarea) {
-        replyTextarea.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendActiveChatReply();
-            }
         });
     }
 

@@ -8,12 +8,14 @@ const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
 const { InboxRepository } = require('./inboxRepository');
 
+const { pool } = require('../m1_storage/leadRepository');
+
 class EmailInboundSync {
 
     /**
      * Sync incoming emails from configured IMAP account
      */
-    static async syncInbox({ host = 'imap.gmail.com', port = 993, secure = true, user, pass, limit = 15 } = {}) {
+    static async syncInbox({ host = 'imap.gmail.com', port = 993, secure = true, user, pass, limit = 25 } = {}) {
         if (!user || !pass) {
             // Check if stored in channel_settings
             const saved = await InboxRepository.getChannelConfig('email');
@@ -40,9 +42,9 @@ class EmailInboundSync {
                 user: user.trim(),
                 pass: pass.trim()
             },
-            connectionTimeout: 12000,
-            greetingTimeout: 8000,
-            socketTimeout: 15000,
+            connectionTimeout: 15000,
+            greetingTimeout: 10000,
+            socketTimeout: 20000,
             logger: false
         });
 
@@ -57,57 +59,106 @@ class EmailInboundSync {
             const lock = await client.getMailboxLock('INBOX');
 
             try {
-                // Fetch the last N messages
                 const mailboxStatus = client.mailbox;
                 const totalMessages = mailboxStatus.exists || 0;
 
                 if (totalMessages > 0) {
-                    const startSeq = Math.max(1, totalMessages - limit + 1);
+                    const fetchLimit = Math.max(limit, 30);
+                    const startSeq = Math.max(1, totalMessages - fetchLimit + 1);
                     const range = `${startSeq}:*`;
 
-                    for await (const message of client.fetch(range, { source: true, envelope: true })) {
+                    // Phase 1: High-speed lightweight envelope fetch (< 700ms)
+                    const uidsToDownload = [];
+                    const envelopeMeta = new Map();
+
+                    for await (const msg of client.fetch(range, { envelope: true, uid: true })) {
+                        const mId = msg.envelope?.messageId;
+                        const fromArr = msg.envelope?.from || [];
+                        const fromAddr = fromArr[0]?.address || '';
+
+                        // Skip emails from self
+                        if (fromAddr && fromAddr.toLowerCase() === user.toLowerCase()) {
+                            continue;
+                        }
+
+                        // Check if already in database by messageId
+                        if (mId) {
+                            const exists = await pool.query(
+                                `SELECT id FROM messages WHERE raw_payload->>'messageId' = $1 LIMIT 1;`,
+                                [mId]
+                            );
+                            if (exists.rows.length > 0) {
+                                continue; // Already synced, skip downloading body!
+                            }
+                        }
+
+                        uidsToDownload.push(msg.uid);
+                        envelopeMeta.set(msg.uid, msg.envelope);
+                    }
+
+                    // Also optionally check any recent unread (UNSEEN) emails from the last 48 hours only
+                    try {
+                        const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+                        const recentUnseenUids = await client.search({ seen: false, since: twoDaysAgo });
+                        if (Array.isArray(recentUnseenUids)) {
+                            // Take at most the latest 10 unread UIDs
+                            const latestUnseen = recentUnseenUids.slice(-10);
+                            for (const uid of latestUnseen) {
+                                if (!uidsToDownload.includes(uid)) {
+                                    uidsToDownload.push(uid);
+                                }
+                            }
+                        }
+                    } catch (_) {}
+
+                    // Phase 2: Download full body source ONLY for genuinely new emails!
+                    for (const uid of uidsToDownload) {
                         try {
-                            const parsed = await simpleParser(message.source);
-                            const senderObj = (parsed.from && parsed.from.value && parsed.from.value[0]) ? parsed.from.value[0] : null;
-                            const senderEmail = senderObj ? senderObj.address : (parsed.from ? parsed.from.text : '');
-                            const senderName = senderObj ? senderObj.name : '';
-                            const subject = parsed.subject || '(No Subject)';
-                            const body = parsed.text || parsed.html || '';
-                            const messageDate = parsed.date || new Date();
+                            for await (const msg of client.fetch(String(uid), { source: true, envelope: true }, { uid: true })) {
+                                const parsed = await simpleParser(msg.source);
+                                const senderObj = (parsed.from && parsed.from.value && parsed.from.value[0]) ? parsed.from.value[0] : null;
+                                let senderEmail = senderObj ? senderObj.address : (parsed.from ? parsed.from.text : '');
+                                const emailMatch = senderEmail.match(/[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}/);
+                                if (emailMatch) senderEmail = emailMatch[0].toLowerCase();
 
-                            // Filter out emails sent by self
-                            if (senderEmail && senderEmail.toLowerCase() !== user.toLowerCase()) {
-                                const recordResult = await InboxRepository.recordInboundMessage({
-                                    channel: 'email',
-                                    sender: senderEmail,
-                                    recipient: user,
-                                    subject,
-                                    body: body.trim(),
-                                    senderName: senderName || senderEmail,
-                                    rawPayload: {
-                                        messageId: parsed.messageId,
-                                        inReplyTo: parsed.inReplyTo,
-                                        references: parsed.references
-                                    },
-                                    timestamp: messageDate
-                                });
+                                const senderName = senderObj ? senderObj.name : (envelopeMeta.get(uid)?.from?.[0]?.name || senderEmail);
+                                const subject = parsed.subject || envelopeMeta.get(uid)?.subject || '(No Subject)';
+                                const body = parsed.text || parsed.html || '';
+                                const messageDate = parsed.date || envelopeMeta.get(uid)?.date || new Date();
 
-                                if (!recordResult.skipped) {
-                                    syncedCount++;
-                                    if (recordResult.matchedLead) {
-                                        matchedCount++;
-                                    }
-
-                                    processedMessages.push({
-                                        id: recordResult.message ? recordResult.message.id : recordResult.conversationId,
-                                        from: senderEmail,
+                                if (senderEmail && senderEmail !== user.toLowerCase()) {
+                                    const recordResult = await InboxRepository.recordInboundMessage({
+                                        channel: 'email',
+                                        sender: senderEmail,
+                                        recipient: user,
                                         subject,
-                                        matchedLead: recordResult.matchedLead ? recordResult.matchedLead.title : null
+                                        body: body.trim(),
+                                        senderName: senderName || senderEmail,
+                                        rawPayload: {
+                                            messageId: parsed.messageId || msg.envelope?.messageId,
+                                            inReplyTo: parsed.inReplyTo,
+                                            references: parsed.references
+                                        },
+                                        timestamp: messageDate
                                     });
+
+                                    if (!recordResult.skipped) {
+                                        syncedCount++;
+                                        if (recordResult.matchedLead) {
+                                            matchedCount++;
+                                        }
+
+                                        processedMessages.push({
+                                            id: recordResult.message ? recordResult.message.id : recordResult.conversationId,
+                                            from: senderEmail,
+                                            subject,
+                                            matchedLead: recordResult.matchedLead ? recordResult.matchedLead.title : null
+                                        });
+                                    }
                                 }
                             }
                         } catch (parseErr) {
-                            console.error('Failed to parse individual email:', parseErr.message);
+                            console.error(`[EmailSync] Error parsing email UID ${uid}:`, parseErr.message);
                         }
                     }
                 }

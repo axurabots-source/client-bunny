@@ -146,6 +146,21 @@ app.post(['/api/outreach/send', '/api/leads/:id/send-email'], async (req, res) =
             bodyText: message.trim()
         });
 
+        // Mirror outbound cold email into Omnichannel Inbox conversation thread
+        try {
+            const { InboxRepository } = require('./modules/inbox/inboxRepository');
+            await InboxRepository.recordOutboundEmailLead({
+                leadId: lead ? lead.id : null,
+                recipient: to.trim(),
+                sender: resolvedSmtp.user || 'Me',
+                subject: subject.trim(),
+                body: message.trim(),
+                rawPayload: sendResult
+            });
+        } catch (inboxErr) {
+            console.warn('[Outreach] Note: could not record into inbox:', inboxErr.message);
+        }
+
         res.json({
             success: true,
             message: `Email sent to ${to.trim()} successfully!`,

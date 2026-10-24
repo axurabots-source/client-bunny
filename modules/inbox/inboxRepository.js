@@ -62,17 +62,46 @@ class InboxRepository {
         try {
             await client.query('BEGIN');
 
-            // 1. Attempt to match with existing lead
-            const matchedLead = await this.matchLeadByContact(sender, channel);
-            const leadId = matchedLead ? matchedLead.id : null;
-            const displayName = senderName || (matchedLead ? matchedLead.title : sender);
+            const cleanSender = (channel === 'email') ? String(sender).trim().toLowerCase() : String(sender).trim();
+            const cleanRecipient = String(recipient || 'Me').trim();
 
-            // 2. Find or create conversation
+            // 1. Global deduplication check: if messageId or WhatsApp key id exists anywhere in messages
+            const msgKeyId = rawPayload?.key?.id;
+            const emailMessageId = rawPayload?.messageId;
+
+            if (emailMessageId) {
+                const exists = await client.query(`
+                    SELECT conversation_id FROM messages 
+                    WHERE raw_payload->>'messageId' = $1
+                    LIMIT 1;
+                `, [emailMessageId]);
+                if (exists.rows.length > 0) {
+                    await client.query('COMMIT');
+                    return { conversationId: exists.rows[0].conversation_id, skipped: true };
+                }
+            } else if (msgKeyId) {
+                const exists = await client.query(`
+                    SELECT conversation_id FROM messages 
+                    WHERE raw_payload->'key'->>'id' = $1
+                    LIMIT 1;
+                `, [msgKeyId]);
+                if (exists.rows.length > 0) {
+                    await client.query('COMMIT');
+                    return { conversationId: exists.rows[0].conversation_id, skipped: true };
+                }
+            }
+
+            // 2. Attempt to match with existing lead
+            const matchedLead = await this.matchLeadByContact(cleanSender, channel);
+            const leadId = matchedLead ? matchedLead.id : null;
+            const displayName = senderName || (matchedLead ? matchedLead.title : cleanSender);
+
+            // 3. Find or create conversation (case-insensitive for email)
             const convRes = await client.query(`
                 SELECT id, unread_count FROM conversations
-                WHERE channel = $1 AND contact_identifier = $2
+                WHERE channel = $1 AND LOWER(contact_identifier) = LOWER($2)
                 LIMIT 1;
-            `, [channel, sender]);
+            `, [channel, cleanSender]);
 
             let conversationId;
             let currentUnread = 0;
@@ -83,34 +112,6 @@ class InboxRepository {
             if (convRes.rows.length > 0) {
                 conversationId = convRes.rows[0].id;
                 currentUnread = convRes.rows[0].unread_count || 0;
-
-                // Deduplication check: check if email messageId or WhatsApp key id already exists
-                const msgKeyId = rawPayload?.key?.id;
-                const emailMessageId = rawPayload?.messageId;
-
-                if (conversationId) {
-                    if (emailMessageId) {
-                        const exists = await client.query(`
-                            SELECT id FROM messages 
-                            WHERE conversation_id = $1 AND raw_payload->>'messageId' = $2
-                            LIMIT 1;
-                        `, [conversationId, emailMessageId]);
-                        if (exists.rows.length > 0) {
-                            await client.query('COMMIT');
-                            return { conversationId, skipped: true, matchedLead };
-                        }
-                    } else if (msgKeyId) {
-                        const exists = await client.query(`
-                            SELECT id FROM messages 
-                            WHERE conversation_id = $1 AND raw_payload->'key'->>'id' = $2
-                            LIMIT 1;
-                        `, [conversationId, msgKeyId]);
-                        if (exists.rows.length > 0) {
-                            await client.query('COMMIT');
-                            return { conversationId, skipped: true, matchedLead };
-                        }
-                    }
-                }
 
                 await client.query(`
                     UPDATE conversations SET
@@ -132,7 +133,7 @@ class InboxRepository {
                     ) VALUES (
                         $1, $2, $3, $4, $5, $6, $7, 1, 'open', NOW(), NOW()
                     ) RETURNING id;
-                `, [leadId, channel, sender, displayName, subject || 'Direct Inquiry', preview, msgTime]);
+                `, [leadId, channel, cleanSender, displayName, subject || 'Direct Inquiry', preview, msgTime]);
 
                 conversationId = insertConv.rows[0].id;
             }
@@ -305,6 +306,102 @@ class InboxRepository {
         } catch (err) {
             await client.query('ROLLBACK').catch(() => {});
             throw err;
+        } finally {
+            try { client.release(); } catch (e) {}
+        }
+    }
+
+    /**
+     * Record an outbound email initiated from Leads Hunter / Cold Pitch composer.
+     * Ensures an Omnichannel Inbox conversation thread is created or updated.
+     */
+    static async recordOutboundEmailLead({ leadId, recipient, sender, subject, body, rawPayload }) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const cleanRecipient = String(recipient || '').trim().toLowerCase();
+            if (!cleanRecipient || !cleanRecipient.includes('@')) {
+                await client.query('ROLLBACK');
+                return null;
+            }
+
+            // Find lead if available
+            let resolvedLeadId = leadId || null;
+            let displayName = cleanRecipient;
+            if (resolvedLeadId) {
+                const leadRes = await client.query('SELECT id, title FROM leads WHERE id = $1 LIMIT 1;', [resolvedLeadId]);
+                if (leadRes.rows.length > 0) {
+                    displayName = leadRes.rows[0].title || cleanRecipient;
+                }
+            } else {
+                const matchedLead = await this.matchLeadByContact(cleanRecipient, 'email');
+                if (matchedLead) {
+                    resolvedLeadId = matchedLead.id;
+                    displayName = matchedLead.title || cleanRecipient;
+                }
+            }
+
+            // Find or create conversation
+            const convRes = await client.query(`
+                SELECT id FROM conversations
+                WHERE channel = 'email' AND LOWER(contact_identifier) = LOWER($1)
+                LIMIT 1;
+            `, [cleanRecipient]);
+
+            let conversationId;
+            const preview = (body || '').substring(0, 150).replace(/\s+/g, ' ').trim();
+            const now = new Date();
+
+            if (convRes.rows.length > 0) {
+                conversationId = convRes.rows[0].id;
+                await client.query(`
+                    UPDATE conversations SET
+                        lead_id = COALESCE(lead_id, $1),
+                        contact_name = COALESCE($2, contact_name),
+                        subject = COALESCE($3, subject),
+                        last_message_preview = $4,
+                        last_message_at = $5,
+                        status = 'replied',
+                        updated_at = NOW()
+                    WHERE id = $6;
+                `, [resolvedLeadId, displayName, subject, preview, now, conversationId]);
+            } else {
+                const insertConv = await client.query(`
+                    INSERT INTO conversations (
+                        lead_id, channel, contact_identifier, contact_name,
+                        subject, last_message_preview, last_message_at, unread_count, status, created_at, updated_at
+                    ) VALUES (
+                        $1, 'email', $2, $3, $4, $5, $6, 0, 'replied', NOW(), NOW()
+                    ) RETURNING id;
+                `, [resolvedLeadId, cleanRecipient, displayName, subject || 'Cold Outreach', preview, now]);
+                conversationId = insertConv.rows[0].id;
+            }
+
+            // Insert outbound message
+            const msgInsert = await client.query(`
+                INSERT INTO messages (
+                    conversation_id, lead_id, channel, direction, sender, recipient,
+                    subject, body, raw_payload, status, created_at
+                ) VALUES (
+                    $1, $2, 'email', 'outbound', $3, $4, $5, $6, $7, 'sent', $8
+                ) RETURNING *;
+            `, [
+                conversationId,
+                resolvedLeadId,
+                sender || 'Me',
+                cleanRecipient,
+                subject || null,
+                body || '',
+                JSON.stringify(rawPayload || {}),
+                now
+            ]);
+
+            await client.query('COMMIT');
+            return { conversationId, message: msgInsert.rows[0] };
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            console.warn('[InboxRepository] recordOutboundEmailLead warning:', err.message);
+            return null;
         } finally {
             try { client.release(); } catch (e) {}
         }

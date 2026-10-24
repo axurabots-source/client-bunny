@@ -1,7 +1,7 @@
 {
   "project_name": "Client Bunny",
   "workspace_path": "d:\\Client Bunny",
-  "last_updated": "2026-10-23T18:20:00+05:00",
+  "last_updated": "2026-10-24T15:52:00+05:00",
   "status": "Active Development",
   "core_architecture": {
     "backend": {
@@ -122,13 +122,17 @@
     {
       "milestone": "Module 15: Background IMAP Inbound Poller & MessageId Deduplication",
       "description": "Added automated background IMAP polling service running every 25 seconds with concurrency lock to automatically fetch prospect replies from Gmail into the Omnichannel Inbox without requiring manual button clicks. Added messageId deduplication in inboxRepository.js to prevent duplicate imports."
+    },
+    {
+      "milestone": "Module 16: Duplicate Send Fix, 2-Phase High-Speed IMAP Sync & RFC Email Threading",
+      "description": "Resolved double outbound email sends by removing duplicate keydown listener, enforcing single-execution mutex, and adding a 3.5s server-side debounce map. Re-engineered email inbound sync with a 2-phase fetch (lightweight envelopes first, download source only for genuinely new emails, capped unseen query) to eliminate IMAP lock delays. Added RFC In-Reply-To/References threading headers, mirrored Leads Hunter cold emails into Inbox threads, and cleaned up historical duplicate messages."
     }
   ],
-  "current_checkpoint": "Omnichannel Email Inbound and Outbound bidirectional synchronization fully operational. Automated background IMAP poller fetches prospect email replies every 25 seconds with messageId deduplication. Inbound reply from blinknship@gmail.com verified in inbox thread.",
+  "current_checkpoint": "Omnichannel Email Inbound and Outbound synchronization hardened and verified. Double-message send bug resolved with frontend mutex and backend debounce. 2-phase high-speed IMAP sync operating cleanly with zero stalls, and RFC email threading active.",
   "next_immediate_steps": [
-    "Scan live WhatsApp QR code from phone to establish verified session if unlinked.",
-    "Monitor unified conversations and replies stream in Omnichannel Inbox.",
-    "Verify automatic incoming email bubble rendering in real time."
+    "Verify live single-message sending and real-time reply receiving in Omnichannel Inbox.",
+    "Monitor automated 25s background IMAP sync for newly arriving client emails.",
+    "WhatsApp live session active (+92 329 1866966)."
   ],
   "key_files": {
     "server": "server.js",

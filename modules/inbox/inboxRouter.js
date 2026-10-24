@@ -83,6 +83,9 @@ router.delete('/inbox/conversations/:id', async (req, res) => {
     }
 });
 
+// In-memory debounce cache to prevent duplicate outbound dispatches
+const recentDispatches = new Map();
+
 // 5. Send Reply from Unified Inbox (Email, WhatsApp, or Instagram)
 router.post('/inbox/conversations/:id/reply', async (req, res) => {
     try {
@@ -98,6 +101,26 @@ router.post('/inbox/conversations/:id/reply', async (req, res) => {
         }
 
         const fullMessageBody = mediaUrl ? `![Photo](${mediaUrl})\n${message || ''}`.trim() : (message || '');
+
+        // --- BACKEND DEBOUNCE PROTECTION ---
+        // If exact same conversationId + message text was sent within 3.5 seconds, block duplicate
+        const debounceKey = `${conversationId}:${fullMessageBody}:${channel}`;
+        const lastSentAt = recentDispatches.get(debounceKey);
+        if (lastSentAt && (Date.now() - lastSentAt) < 3500) {
+            console.warn(`[Inbox Reply] Blocked duplicate outbound dispatch within 3.5s window for conv ${conversationId}`);
+            const lastOutbound = (conversation.messages || []).filter(m => m.direction === 'outbound').pop();
+            return res.json({ success: true, message: lastOutbound || { body: fullMessageBody }, duplicateBlocked: true });
+        }
+        recentDispatches.set(debounceKey, Date.now());
+
+        // Periodically purge old debounce entries
+        if (recentDispatches.size > 200) {
+            const cutoff = Date.now() - 15000;
+            for (const [k, v] of recentDispatches.entries()) {
+                if (v < cutoff) recentDispatches.delete(k);
+            }
+        }
+
         let outboundMsg = null;
 
         if (channel === 'email') {
@@ -118,13 +141,22 @@ router.post('/inbox/conversations/:id/reply', async (req, res) => {
                 });
             }
 
+            // Find parent inbound message for In-Reply-To and References RFC headers
+            const latestInbound = (conversation.messages || [])
+                .filter(m => m.direction === 'inbound')
+                .pop();
+            const inReplyTo = latestInbound?.raw_payload?.messageId || null;
+            const references = latestInbound?.raw_payload?.references || inReplyTo;
+
             let emailSendResult = null;
             try {
                 emailSendResult = await sendOutreachEmail(resolvedSmtp, {
                     leadId: conversation.lead_id,
                     to: recipient,
                     subject,
-                    bodyText: fullMessageBody
+                    bodyText: fullMessageBody,
+                    inReplyTo,
+                    references
                 });
                 console.log(`[Inbox Reply] Outbound email delivered to ${recipient} (Message ID: ${emailSendResult.messageId})`);
             } catch (emailErr) {
