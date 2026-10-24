@@ -1,19 +1,35 @@
 const nodemailer = require('nodemailer');
 const { pool } = require('../m1_storage/leadRepository');
 
+// Pooled transporter cache for high-speed email dispatch with keepalive
+let cachedTransporter = null;
+let cachedTransporterKey = null;
+
 /**
- * Creates a reusable nodemailer transporter from user-provided configuration
+ * Creates or retrieves a pooled nodemailer transporter from user-provided configuration
  */
 function createTransporter(config) {
     if (!config || !config.user || !config.pass) {
         throw new Error("Missing SMTP credentials (User / Password required).");
     }
 
+    const host = (config.host || 'smtp.gmail.com').trim();
     const port = parseInt(config.port, 10) || 465;
     const isSecure = config.secure !== undefined ? Boolean(config.secure) : (port === 465);
+    const key = `${config.user.trim()}:${config.pass.trim()}:${host}:${port}:${isSecure}`;
 
-    return nodemailer.createTransport({
-        host: (config.host || 'smtp.gmail.com').trim(),
+    if (cachedTransporter && cachedTransporterKey === key) {
+        return cachedTransporter;
+    }
+
+    cachedTransporterKey = key;
+    cachedTransporter = nodemailer.createTransport({
+        pool: true,
+        maxConnections: 3,
+        maxMessages: 100,
+        rateDelta: 1000,
+        rateLimit: 5,
+        host: host,
         port: port,
         secure: isSecure,
         auth: {
@@ -24,6 +40,8 @@ function createTransporter(config) {
             rejectUnauthorized: false
         }
     });
+
+    return cachedTransporter;
 }
 
 /**

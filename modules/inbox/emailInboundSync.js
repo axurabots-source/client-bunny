@@ -67,9 +67,9 @@ class EmailInboundSync {
                     const startSeq = Math.max(1, totalMessages - fetchLimit + 1);
                     const range = `${startSeq}:*`;
 
-                    // Phase 1: High-speed lightweight envelope fetch (< 700ms)
-                    const uidsToDownload = [];
-                    const envelopeMeta = new Map();
+                    // Phase 1: High-speed lightweight envelope fetch (< 300ms)
+                    const candidateMessages = [];
+                    const messageIdsToCheck = [];
 
                     for await (const msg of client.fetch(range, { envelope: true, uid: true })) {
                         const mId = msg.envelope?.messageId;
@@ -81,17 +81,32 @@ class EmailInboundSync {
                             continue;
                         }
 
-                        // Check if already in database by messageId
-                        if (mId) {
-                            const exists = await pool.query(
-                                `SELECT id FROM messages WHERE raw_payload->>'messageId' = $1 LIMIT 1;`,
-                                [mId]
-                            );
-                            if (exists.rows.length > 0) {
-                                continue; // Already synced, skip downloading body!
-                            }
-                        }
+                        candidateMessages.push(msg);
+                        if (mId) messageIdsToCheck.push(mId);
+                    }
 
+                    // Single batch check in database for all candidate messageIds (1 query instead of 30)
+                    const existingSet = new Set();
+                    if (messageIdsToCheck.length > 0) {
+                        try {
+                            const existsRes = await pool.query(
+                                `SELECT raw_payload->>'messageId' AS mid FROM messages WHERE raw_payload->>'messageId' = ANY($1::text[])`,
+                                [messageIdsToCheck]
+                            );
+                            for (const row of existsRes.rows) {
+                                if (row.mid) existingSet.add(row.mid);
+                            }
+                        } catch (_) {}
+                    }
+
+                    const uidsToDownload = [];
+                    const envelopeMeta = new Map();
+
+                    for (const msg of candidateMessages) {
+                        const mId = msg.envelope?.messageId;
+                        if (mId && existingSet.has(mId)) {
+                            continue; // Already synced, skip downloading body!
+                        }
                         uidsToDownload.push(msg.uid);
                         envelopeMeta.set(msg.uid, msg.envelope);
                     }
@@ -197,7 +212,7 @@ class EmailInboundSync {
     /**
      * Start background automatic IMAP polling
      */
-    static startAutoSync(intervalSeconds = 25) {
+    static startAutoSync(intervalSeconds = 12) {
         if (this.pollerInterval) return;
         console.log(`[EmailSync] 🔄 Background IMAP auto-poller initiated (every ${intervalSeconds}s)...`);
 

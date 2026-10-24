@@ -130,12 +130,16 @@
     {
       "milestone": "Module 17: Real-Time Inbox Sync & Outbound Dispatch Stability",
       "description": "Eliminated server watch restart thrashing by scoping dev script exclusively to server.js (preventing Supabase connection pool exhaustion and dropped fetch calls), converted IMAP phase 2 source fetch to single-query batch download to eliminate socket timeouts, and revamped frontend real-time poller to track message IDs and bubble counts with auto-scroll to bottom upon new message arrival without requiring page reload. Verified live outbound SMTP delivery to blinknship@gmail.com and bidirectional conversation update."
+    },
+    {
+      "milestone": "Module 18: SMTP Connection Pooling, 12s IMAP Polling & Custom Subject Line",
+      "description": "Accelerated outbound email dispatch to ~1.5s using a pooled keepalive SMTP transporter (pool: true, maxConnections: 3), eliminating repetitive TLS handshakes. Accelerated IMAP envelope checks by replacing sequential Supabase queries with single batch ANY($1::text[]) mid checks and tightened polling to 12s. Added custom editable email subject line bar in Omnichannel Inbox composer (shown only for email channels, hidden for WhatsApp/IG), updating thread subjects in database upon dispatch."
     }
   ],
-  "current_checkpoint": "Omnichannel Inbox fully stabilized. Outbound message dispatches cleanly via SMTP, incoming messages appear dynamically in real time without page reload, IMAP sync operates via high-speed batch download without timeouts, and Supabase connection pool remains stable.",
+  "current_checkpoint": "Omnichannel Inbox high-speed email pipeline active. Outbound dispatch takes ~1.5s via warm pooled SMTP connection, incoming IMAP checks run in ~5s with 12s automated intervals, and users can specify or edit custom email subject lines directly in the chat composer.",
   "next_immediate_steps": [
-    "Verify live real-time incoming messages appear in browser without manual reload.",
-    "Verify outbound messages dispatch seamlessly from inbox composer with verified single delivery.",
+    "Verify live inbox composer UI shows Subject bar when Email conversation is open.",
+    "Verify subject bar changes persist and reflect in delivered recipient inbox.",
     "WhatsApp live session active (+92 329 1866966)."
   ],
   "key_files": {

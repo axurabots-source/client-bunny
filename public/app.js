@@ -2361,6 +2361,21 @@ window.openConversation = async function(id, silent = false) {
             replyIndicator.innerHTML = `${chIcon} Replying via <strong>${channel.toUpperCase()}</strong> (${escapeHtml(contactIdentifier)})`;
         }
 
+        // Email Subject Input Management
+        const subjectRow = document.getElementById('chatEmailSubjectRow');
+        const subjectInput = document.getElementById('chatEmailSubjectInput');
+        if (subjectRow && subjectInput) {
+            if (channel === 'email') {
+                subjectRow.style.display = 'flex';
+                if (!silent || !subjectInput.value.trim()) {
+                    subjectInput.value = conv.subject || '';
+                }
+            } else {
+                subjectRow.style.display = 'none';
+                subjectInput.value = '';
+            }
+        }
+
         // Render Messages History (force scroll to bottom on fresh manual open)
         renderChatMessages(messages, conv, !silent);
 
@@ -2741,12 +2756,16 @@ window.sendActiveChatReply = async function() {
             }
         }
 
+        const subjectInput = document.getElementById('chatEmailSubjectInput');
+        const customSubject = subjectInput ? subjectInput.value.trim() : '';
+
         const res = await fetch(`/api/inbox/conversations/${activeConversationId}/reply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: messageText,
-                mediaUrl: mediaUrl
+                mediaUrl: mediaUrl,
+                subject: customSubject || undefined
             })
         });
 

@@ -591,6 +591,11 @@
                                     <button type="button" class="chat-attach-remove" onclick="removeChatAttachment()" title="Remove attachment">✕</button>
                                 </div>
                             </div>
+                            <!-- Email Subject Row (Shown when replying via Email) -->
+                            <div class="chat-email-subject-row" id="chatEmailSubjectRow" style="display: none;">
+                                <span class="chat-subject-prefix">Subject:</span>
+                                <input type="text" id="chatEmailSubjectInput" class="chat-subject-input" placeholder="Type email subject..." />
+                            </div>
 
                             <div class="chat-input-row">
                                 <button type="button" class="chat-attach-btn" id="chatAttachBtn" onclick="document.getElementById('chatFileInput').click()" title="Attach Photo or Document">

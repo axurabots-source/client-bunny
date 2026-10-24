@@ -2651,6 +2651,46 @@ body.crm-body.sidebar-collapsed .crm-main {
     color: #DC2626;
 }
 
+/* Email Subject Input Row in Composer */
+.chat-email-subject-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #FFFFFF;
+    border: 1px solid #D1D7DB;
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin-bottom: 4px;
+    box-shadow: 0 1px 2px rgba(11, 20, 26, 0.04);
+    animation: fadeInBubble 0.15s ease-out;
+}
+
+.chat-subject-prefix {
+    font-size: 11px;
+    font-weight: 700;
+    color: #54656F;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.chat-subject-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: #111B21;
+    background: transparent;
+    padding: 2px 0;
+}
+
+.chat-subject-input::placeholder {
+    color: #8696A0;
+}
+
+
 /* Image Lightbox Modal */
 .image-lightbox-overlay {
     position: fixed;

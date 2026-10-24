@@ -14,8 +14,8 @@ const { MetaReceiver } = require('./metaReceiver');
 const { dispatchColdEmail } = require('../m5_email_dispatcher/mailer');
 const { baileysManager } = require('./baileysManager');
 
-// Auto-start background IMAP email sync every 25 seconds
-EmailInboundSync.startAutoSync(25);
+// Auto-start background IMAP email sync every 12 seconds
+EmailInboundSync.startAutoSync(12);
 
 // 1. Get Inbox Overview Stats (Total unread, counts by channel)
 router.get('/inbox/stats', async (req, res) => {
@@ -95,7 +95,7 @@ router.post('/inbox/conversations/:id/reply', async (req, res) => {
             return res.status(404).json({ success: false, error: 'Conversation not found' });
         }
 
-        const { message, channel = conversation.channel, smtpConfig, recipientEmail, mediaUrl } = req.body;
+        const { message, channel = conversation.channel, smtpConfig, recipientEmail, mediaUrl, subject: customSubject } = req.body;
         if (!message && !mediaUrl) {
             return res.status(400).json({ success: false, error: 'Message body or media cannot be empty' });
         }
@@ -128,7 +128,19 @@ router.post('/inbox/conversations/:id/reply', async (req, res) => {
             if (!recipient || !recipient.includes('@')) {
                 return res.status(400).json({ success: false, error: 'Invalid recipient email address for conversation.' });
             }
-            const subject = conversation.subject ? (conversation.subject.toLowerCase().startsWith('re:') ? conversation.subject : `Re: ${conversation.subject}`) : 'Follow up from Client Bunny';
+            
+            // Allow user-customized subject or fall back to conversation thread subject
+            const subject = (customSubject && customSubject.trim())
+                ? customSubject.trim()
+                : (conversation.subject ? (conversation.subject.toLowerCase().startsWith('re:') ? conversation.subject : `Re: ${conversation.subject}`) : 'Follow up from Client Bunny');
+
+            // Update conversation subject in database if user customized it
+            if (customSubject && customSubject.trim() && customSubject.trim() !== conversation.subject) {
+                try {
+                    const { pool } = require('../m1_storage/leadRepository');
+                    await pool.query('UPDATE conversations SET subject = $1, updated_at = NOW() WHERE id = $2;', [subject, conversationId]);
+                } catch (_) {}
+            }
 
             // Resolve SMTP credentials from unified Inbox channel_settings in Supabase
             const { sendOutreachEmail, resolveSmtpConfig } = require('../m5_email_dispatcher/mailer');
