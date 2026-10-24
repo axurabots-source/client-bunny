@@ -101,11 +101,14 @@ class MetaReceiver {
             const senderName = [body.first_name, body.last_name].filter(Boolean).join(' ') || body.full_name || body.name || `@${senderId}`;
             const messageText = body.message || body.last_input_text || body.text || body.body || '[Instagram Message]';
 
+            const channel = (body.channel || (body.facebook_id || body.fb_id ? 'facebook' : 'instagram')).toLowerCase();
+            const subject = channel === 'facebook' ? 'Facebook Messenger' : 'Instagram Direct Message';
+
             const result = await InboxRepository.recordInboundMessage({
-                channel: 'instagram',
-                sender: senderId.startsWith('@') ? senderId : `@${senderId}`,
+                channel,
+                sender: senderId.startsWith('@') ? senderId : (channel === 'instagram' ? `@${senderId}` : senderId),
                 recipient: 'Me',
-                subject: 'Instagram Direct Message',
+                subject,
                 body: messageText,
                 senderName,
                 rawPayload: body,
