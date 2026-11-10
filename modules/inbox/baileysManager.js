@@ -1,12 +1,28 @@
 const path = require('path');
 const fs = require('fs');
-const baileys = require('@whiskeysockets/baileys');
-const QRCode = require('qrcode');
-const pino = require('pino');
-const { InboxRepository } = require('./inboxRepository');
+let baileys = null;
+let makeWASocket = null;
+let useMultiFileAuthState = null;
+let DisconnectReason = null;
+let downloadMediaMessage = null;
 
-const makeWASocket = baileys.default || baileys.makeWASocket;
-const { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = baileys;
+try {
+    baileys = require('@whiskeysockets/baileys');
+    makeWASocket = baileys.default || baileys.makeWASocket;
+    useMultiFileAuthState = baileys.useMultiFileAuthState;
+    DisconnectReason = baileys.DisconnectReason;
+    downloadMediaMessage = baileys.downloadMediaMessage;
+} catch (e) {
+    console.warn('[BaileysManager] Baileys not available in current environment (lazy fallback):', e.message);
+}
+const QRCode = require('qrcode');
+let pino = null;
+try {
+    pino = require('pino');
+} catch (e) {
+    pino = () => ({ level: 'silent', trace: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, fatal: () => {}, child: () => ({ trace: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, fatal: () => {} }) });
+}
+const { InboxRepository } = require('./inboxRepository');
 
 class BaileysManager {
     constructor() {

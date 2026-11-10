@@ -1,4 +1,9 @@
-const { chromium } = require('playwright');
+let chromium = null;
+try {
+    chromium = require('playwright').chromium;
+} catch (e) {
+    console.warn('[DorkResolver] Playwright not loaded in current environment (lazy load fallback):', e.message);
+}
 const { pool, LeadRepository } = require('../m1_storage/leadRepository');
 
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;

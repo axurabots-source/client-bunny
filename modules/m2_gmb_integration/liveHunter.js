@@ -1,4 +1,9 @@
-const { chromium } = require('playwright');
+let chromium = null;
+try {
+    chromium = require('playwright').chromium;
+} catch (e) {
+    console.warn('[LiveHunter] Playwright not loaded in current environment (lazy load fallback):', e.message);
+}
 const { pool, LeadRepository } = require('../m1_storage/leadRepository');
 const { tagPainPoints } = require('../m1_storage/painPointTagger');
 const { formatDirectMapsLink } = require('./mapsHelper');

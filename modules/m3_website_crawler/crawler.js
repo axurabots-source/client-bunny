@@ -1,7 +1,12 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const https = require('https');
-const { chromium } = require('playwright');
+let chromium = null;
+try {
+    chromium = require('playwright').chromium;
+} catch (e) {
+    console.warn('[Crawler] Playwright not loaded in current environment (lazy load fallback):', e.message);
+}
 const { pool, LeadRepository } = require('../m1_storage/leadRepository');
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
