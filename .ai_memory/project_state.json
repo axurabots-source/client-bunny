@@ -1,7 +1,7 @@
 {
   "project_name": "Client Bunny",
   "workspace_path": "d:\\Client Bunny",
-  "last_updated": "2026-11-10T20:12:00+05:00",
+  "last_updated": "2026-11-10T20:33:00+05:00",
   "status": "Active Development",
   "core_architecture": {
     "backend": {
@@ -54,6 +54,12 @@
         "Clean monochrome white theme (#FFFFFF cards, #E4E4E7 borders, #09090B text)",
         "100% SVG icon geometry (zero emojis)"
       ]
+    },
+    "deployment": {
+      "production_url": "https://client-bunny.vercel.app",
+      "platform": "Vercel Serverless (@vercel/node)",
+      "config_file": "vercel.json",
+      "local_ports": "http://localhost:3000 (primary) & http://localhost:3005 (aux)"
     },
     "communication_channels": {
       "whatsapp": {
@@ -166,7 +172,7 @@
       "description": "Diagnosed and resolved 500 FUNCTION_INVOCATION_FAILED on Vercel: added missing pino dependency to package.json, converted Playwright require statements to lazy-loaded fallbacks across liveHunter/crawler/dorkResolver, added VERCEL environment guards to disable background IMAP auto-poller interval and WhatsApp Baileys socket auto-initialization in serverless Lambdas, added includeFiles: [public/**, modules/**] to vercel.json, and pushed all tracking modules to GitHub main. Verified live at https://client-bunny.vercel.app returning 200 OK across UI and API endpoints."
     }
   ],
-  "current_checkpoint": "Client Bunny is 100% live and operational on both local development (http://localhost:3000) and Vercel Production (https://client-bunny.vercel.app). Database connected, leads streaming, tracking dashboard active.",
+  "current_checkpoint": "Client Bunny is 100% live and operational on both local development (http://localhost:3000) and Vercel Production (https://client-bunny.vercel.app). Database connected, leads streaming, tracking dashboard active. Ready for Phase 2 implementation.",
   "next_immediate_steps": [
     "Proceed with Phase 2 requirements definition and implementation."
   ],
