@@ -1,7 +1,7 @@
 {
   "project_name": "Client Bunny",
   "workspace_path": "d:\\Client Bunny",
-  "last_updated": "2026-10-24T15:52:00+05:00",
+  "last_updated": "2026-11-01T20:22:00+05:00",
   "status": "Active Development",
   "core_architecture": {
     "backend": {
@@ -16,19 +16,27 @@
         "instagram_webhook": "/api/webhooks/instagram",
         "leads": "/api/leads",
         "enrichment": "/api/enrich",
-        "pitch": "/api/pitch"
+        "pitch": "/api/pitch",
+        "track_open": "/api/track/open/:token",
+        "track_click": "/api/track/click/:token",
+        "tracking_overview": "/api/tracking/overview",
+        "tracking_logs": "/api/tracking/logs",
+        "analyze_spam": "/api/tracking/analyze-spam",
+        "followup_pitch": "/api/leads/:id/generate-followup"
       }
     },
     "database": {
       "provider": "Supabase PostgreSQL",
       "client": "pg (node-postgres Pool)",
       "schema_file": "schema_supabase.sql",
-      "migration_script": "migrate_supabase.js",
+      "migration_script": "scripts/migrate_tracking_schema.js",
       "tables": [
         "leads",
         "conversations",
         "messages",
-        "channel_settings"
+        "channel_settings",
+        "outreach_logs",
+        "decision_makers"
       ]
     },
     "frontend": {
@@ -43,7 +51,8 @@
         "Standalone PWA (manifest.json, sw.js)",
         "Fully Mobile Responsive (iOS, Android, Tablet)",
         "Zero horizontal scroll / lockable viewports",
-        "Rich UI aesthetic: Dark obsidian + emerald accents"
+        "Clean monochrome white theme (#FFFFFF cards, #E4E4E7 borders, #09090B text)",
+        "100% SVG icon geometry (zero emojis)"
       ]
     },
     "communication_channels": {
@@ -64,13 +73,17 @@
         "mode": "ManyChat Free Automation Bridge (No Meta Developer App needed)",
         "receiver": "modules/inbox/metaReceiver.js",
         "webhook_endpoint": "/api/webhooks/manychat",
-        "features": ["Incoming DM streaming", "Instant test simulation"]
+        "features": [
+          "Incoming DM streaming",
+          "Instant test simulation"
+        ]
       },
       "email": {
-        "incoming": "imapflow + mailparser (Automated 25s background polling with concurrency lock)",
-        "outgoing": "nodemailer (Unified SMTP via channel_settings)",
+        "incoming": "imapflow + mailparser (Automated 12s background polling with concurrency lock)",
+        "outgoing": "nodemailer (Unified pooled SMTP via channel_settings)",
         "security": "AES-256-GCM CryptoVault (cryptoVault.js)",
-        "deduplication": "Unique messageId index check across conversations"
+        "deduplication": "Unique messageId index check across conversations",
+        "tracking": "Native 1x1 transparent GIF open pixel, link click wrapping, anti-spam bot detection (modules/tracking/tracker.js)"
       }
     },
     "ai_engine": {
@@ -78,7 +91,8 @@
       "features": [
         "Personalized 3-step Cold Email Pitch generator",
         "One-click Lead Pain Points analysis",
-        "Omnichannel AI Suggest Reply in chat composer"
+        "Omnichannel AI Suggest Reply in chat composer",
+        "Contextual Follow-Up Pitch Generator (open-aware with 'Re:' threading)"
       ]
     }
   },
@@ -133,30 +147,38 @@
     },
     {
       "milestone": "Module 18: SMTP Connection Pooling, 12s IMAP Polling & Custom Subject Line",
-      "description": "Accelerated outbound email dispatch to ~1.5s using a pooled keepalive SMTP transporter (pool: true, maxConnections: 3), eliminating repetitive TLS handshakes. Accelerated IMAP envelope checks by replacing sequential Supabase queries with single batch ANY($1::text[]) mid checks and tightened polling to 12s. Added custom editable email subject line bar in Omnichannel Inbox composer (shown only for email channels, hidden for WhatsApp/IG), updating thread subjects in database upon dispatch."
+      "description": "Accelerated outbound email dispatch to ~1.5s using a pooled keepalive SMTP transporter (pool: true, maxConnections: 3), reusing warm TLS connections instead of repeated handshakes. Accelerated IMAP envelope checks by replacing sequential Supabase queries with single batch ANY($1::text[]) mid checks and tightened polling to 12s. Added custom editable email subject line bar in Omnichannel Inbox composer (shown only for email channels, hidden for WhatsApp/IG), updating thread subjects in database upon dispatch."
     },
     {
       "milestone": "Module 19: n8n Meta Omnichannel Bridge (Instagram & Facebook Messenger)",
       "description": "Discovered and booted user's local n8n instance (v2.37.10 on port 5678). Enhanced metaReceiver.js with dynamic multi-channel support (auto-detecting facebook vs instagram). Authored and verified n8n workflows (workflows/n8n_instagram_client_bunny.json and workflows/n8n_meta_omnichannel_client_bunny.json) with normalizer code and forwarder to http://localhost:3000/api/webhooks/manychat. Successfully executed and verified end-to-end inbound delivery into Supabase messages (ID 312). Clarified Meta Developer 'Development Mode' policy bypassing legal business verification for self-hosted apps."
+    },
+    {
+      "milestone": "Module 20: Open & Click Tracking Engine, Dynamic Days Elapsed Cadence & Contextual AI Follow-Up Generator",
+      "description": "Implemented native Instantly/Lemlist-style email tracking without third-party fees. Extended Supabase outreach_logs and leads schemas with tracking_token, opened_at, last_opened_at, open_count, clicked_at, last_clicked_at, click_count, and follow-up timers. Created modules/tracking/tracker.js with 1x1 transparent GIF server (/api/track/open/:token), hyperlink wrapper (/api/track/click/:token), anti-spam scanner/bot detector, and a 4-stage cadence calculator (Day 0-2 waiting, Day 3-6 gentle bump, Day 7-13 value add, Day 14+ breakup, auto-halt on reply). Connected mailer.js to auto-inject tracking pixels on cold pitches. Built generateFollowUpPitch in aiIntelligence.js tailoring threaded follow-ups ('Re:') using Gemini Flash. Added UI cadence badges, mini tracking pills, filter buttons, and 1-click '⚡ Follow-Up' action in Leads Hunter Dashboard. Verified 100% via unit and end-to-end DB tests."
+    },
+    {
+      "milestone": "Module 21: Dedicated Tracking & Analytics Dashboard, SVG Migration & Pre-Flight Spam Risk Analyzer",
+      "description": "Segregated Outreach Tracking & Cadence into its own dedicated 'Tracking & Analytics' dashboard in the sidebar and bottom mobile nav. Cleaned the Leads table to 5 core business columns. Replaced all emojis with crisp SVG icons. Unified UI to a clean monochrome white theme (#FFFFFF cards, #E4E4E7 borders, #09090B typography). Built a 5-card KPI metric grid, an interactive Pre-Flight Spam Risk Analyzer (/api/tracking/analyze-spam) scoring copy against 15+ B2B cold email spam patterns, and a live Outreach & Cadence Monitor Table (/api/tracking/logs) with engagement signals, cadence badges, and 1-click AI follow-up actions. Fully verified via automated Playwright test suite (tests/verify_tracking_ui.js) including 375px mobile viewport zero-overflow test."
     }
   ],
-  "current_checkpoint": "Meta Omnichannel pipeline established via local n8n engine and metaReceiver.js. Inbound Instagram/Facebook messages map seamlessly to Client Bunny Unified Inbox. Email pipeline operates with connection pooling and custom subject editing. WhatsApp Baileys remains active.",
+  "current_checkpoint": "Phase 1 fully complete (Modules 1-21) including clean Leads Hunter table, dedicated Tracking & Analytics dashboard with zero emojis, pure white theme, responsive design, deliverability pre-flight spam checker, and automated Playwright test verification. Ready for Phase 2 requirements definition.",
   "next_immediate_steps": [
-    "Publish n8n workflow for continuous background listening on port 5678.",
-    "Decide between Meta Development Mode App ID for direct polling or n8n webhook tunnel.",
-    "WhatsApp live session active (+92 329 1866966).",
-    "Monitor real-time dual-pane Omnichannel Inbox performance across all 3 channels."
+    "Receive and document Phase 2 specifications from user.",
+    "Proceed with Phase 2 implementation."
   ],
   "key_files": {
     "server": "server.js",
+    "tracker": "modules/tracking/tracker.js",
+    "mailer": "modules/m5_email_dispatcher/mailer.js",
+    "ai_engine": "modules/m6_ai_engine/aiIntelligence.js",
+    "lead_repo": "modules/m1_storage/leadRepository.js",
     "frontend_html": "public/index.html",
     "frontend_css": "public/style.css",
     "frontend_js": "public/app.js",
+    "db_schema": "schema_supabase.sql",
     "baileys_whatsapp": "modules/inbox/baileysManager.js",
     "inbox_router": "modules/inbox/inboxRouter.js",
-    "inbox_repo": "modules/inbox/inboxRepository.js",
-    "meta_receiver": "modules/inbox/metaReceiver.js",
-    "db_schema": "schema_supabase.sql",
-    "n8n_workflow": "workflows/n8n_meta_omnichannel_client_bunny.json"
+    "ui_test_suite": "tests/verify_tracking_ui.js"
   }
 }

@@ -3678,5 +3678,557 @@ body.crm-body.mobile-nav-open .sidebar-backdrop {
     }
 }
 
+/* ==========================================================
+ * OUTREACH TRACKING & FOLLOW-UP AGING STYLES
+ * ========================================================== */
+.cadence-cell-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
+.cadence-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    line-height: 1.3;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+/* Badge States */
+.badge-new {
+    background: #F4F4F5;
+    color: #71717A;
+    border-color: #E4E4E7;
+}
+
+.badge-waiting {
+    background: #EFF6FF;
+    color: #2563EB;
+    border-color: #BFDBFE;
+}
+
+.badge-waiting-opened {
+    background: #F0FDF4;
+    color: #16A34A;
+    border-color: #BBF7D0;
+}
+
+.badge-due {
+    background: #FEF3C7;
+    color: #D97706;
+    border-color: #FDE68A;
+    font-weight: 700;
+}
+
+.badge-due-hot {
+    background: #FEF2F2;
+    color: #DC2626;
+    border-color: #FECACA;
+    font-weight: 700;
+    animation: pulse-ring 2s infinite ease-in-out;
+}
+
+.badge-due-warning {
+    background: #FFF7ED;
+    color: #EA580C;
+    border-color: #FFEDD5;
+    font-weight: 700;
+}
+
+.badge-overdue {
+    background: #FEF2F2;
+    color: #B91C1C;
+    border-color: #F87171;
+}
+
+.badge-replied {
+    background: #FAF5FF;
+    color: #9333EA;
+    border-color: #E9D5FF;
+    font-weight: 700;
+}
+
+@keyframes pulse-ring {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.15); }
+}
+
+.tracking-mini-pills {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.mini-track-pill {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    line-height: 1.3;
+}
+
+.pill-opened {
+    background: #E0F2FE;
+    color: #0369A1;
+    border: 1px solid #BAE6FD;
+}
+
+.pill-clicked {
+    background: #DCFCE7;
+    color: #15803D;
+    border: 1px solid #BBF7D0;
+}
+
+/* Follow-up button with amber highlight */
+.btn-followup-pulse {
+    background: #FEF3C7 !important;
+    color: #92400E !important;
+    border: 1px solid #F59E0B !important;
+    font-weight: 700 !important;
+    transition: all 0.2s ease !important;
+}
+
+.btn-followup-pulse:hover {
+    background: #FDE68A !important;
+    border-color: #D97706 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.25);
+}
+
+/* ==========================================================
+   MODULE: OUTREACH TRACKING & ANALYTICS DASHBOARD STYLES
+   Minimal Monochrome White & Crisp Zinc Theme
+   ========================================================== */
+
+.tracking-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    background: #F4F4F5;
+    color: #18181B;
+    border: 1px solid #E4E4E7;
+    margin-bottom: 8px;
+}
+
+.tracking-hero-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* 5-Column Responsive KPI Cards Grid */
+.tracking-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+@media (max-width: 1100px) {
+    .tracking-kpi-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .tracking-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+}
+
+@media (max-width: 420px) {
+    .tracking-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.kpi-card {
+    background: #FFFFFF;
+    border: 1px solid #E4E4E7;
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-card:hover {
+    border-color: #A1A1AA;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.06);
+}
+
+.kpi-card-due {
+    border-color: #FCD34D;
+    background: linear-gradient(180deg, #FFFBEB 0%, #FFFFFF 100%);
+}
+
+.kpi-card-due:hover {
+    border-color: #F59E0B;
+}
+
+.kpi-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.kpi-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #71717A;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.kpi-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: #F4F4F5;
+    color: #18181B;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kpi-card-due .kpi-icon {
+    background: #FEF3C7;
+    color: #92400E;
+}
+
+.kpi-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: #09090B;
+    line-height: 1.1;
+    margin-bottom: 4px;
+    letter-spacing: -0.02em;
+}
+
+.kpi-hint {
+    font-size: 11.5px;
+    color: #71717A;
+    line-height: 1.4;
+}
+
+/* Pre-Flight Deliverability & Spam Inspector Panel */
+.deliverability-panel {
+    background: #FFFFFF;
+    border: 1px solid #E4E4E7;
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+    margin-top: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.deliverability-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #F4F4F5;
+    margin-bottom: 14px;
+}
+
+.deliverability-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.deliverability-badge-shield {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #F4F4F5;
+    border: 1px solid #E4E4E7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #09090B;
+    flex-shrink: 0;
+}
+
+.deliverability-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #09090B;
+    margin: 0;
+}
+
+.deliverability-subtitle {
+    font-size: 12px;
+    color: #71717A;
+    margin: 2px 0 0 0;
+}
+
+.spam-checker-body {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+}
+
+@media (max-width: 768px) {
+    .spam-checker-body {
+        grid-template-columns: 1fr;
+    }
+}
+
+.spam-score-gauge {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 12px 16px;
+    background: #FAFAFA;
+    border: 1px solid #E4E4E7;
+    border-radius: var(--radius-sm);
+    margin-bottom: 10px;
+}
+
+.spam-score-num {
+    font-size: 32px;
+    font-weight: 800;
+    color: #047857;
+    letter-spacing: -0.03em;
+}
+
+.spam-score-denom {
+    font-size: 14px;
+    color: #71717A;
+    font-weight: 600;
+}
+
+.spam-score-badge {
+    margin-left: auto;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #ECFDF5;
+    color: #047857;
+    border: 1px solid #A7F3D0;
+}
+
+.spam-flags-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.spam-flag-item {
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    line-height: 1.4;
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+}
+
+.spam-flag-item.safe {
+    background: #F0FDF4;
+    color: #166534;
+    border: 1px solid #BBF7D0;
+}
+
+.spam-flag-item.warning {
+    background: #FEF3C7;
+    color: #92400E;
+    border: 1px solid #FDE68A;
+}
+
+/* Tracking Table Header & Layout */
+.tracking-table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid #E4E4E7;
+    background: #FAFAFA;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.tracking-table-title-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.tracking-row {
+    transition: background-color 0.15s ease;
+    cursor: pointer;
+    background-color: #FFFFFF;
+}
+
+.tracking-row:hover {
+    background-color: #FAFAFA !important;
+}
+
+.row-due-highlight {
+    background: #FFFDF5 !important;
+}
+
+.row-due-highlight:hover {
+    background: #FEF9C3 !important;
+}
+
+/* Tracking Mini Signal Pills (Monochrome & Subtle Accent System) */
+.pill-opened {
+    background: #EFF6FF !important;
+    color: #1D4ED8 !important;
+    border: 1px solid #DBEAFE !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pill-clicked {
+    background: #ECFDF5 !important;
+    color: #047857 !important;
+    border: 1px solid #A7F3D0 !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pill-unopened {
+    background: #F4F4F5 !important;
+    color: #71717A !important;
+    border: 1px solid #E4E4E7 !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Cadence Badges Clean Unified Styling */
+.cadence-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.badge-waiting {
+    background: #F4F4F5;
+    color: #52525B;
+    border: 1px solid #E4E4E7;
+}
+
+.badge-waiting-opened {
+    background: #EFF6FF;
+    color: #1D4ED8;
+    border: 1px solid #DBEAFE;
+}
+
+.badge-due, .badge-due-hot {
+    background: #FFFBEB;
+    color: #B45309;
+    border: 1px solid #FCD34D;
+}
+
+.badge-due-warning {
+    background: #FFF7ED;
+    color: #C2410C;
+    border: 1px solid #FDBA74;
+}
+
+.badge-overdue {
+    background: #FEF2F2;
+    color: #B91C1C;
+    border: 1px solid #FECACA;
+}
+
+.badge-replied {
+    background: #F5F3FF;
+    color: #6D28D9;
+    border: 1px solid #DDD6FE;
+}
+
+/* Follow-up Button Styling */
+.btn-followup-pulse {
+    background: #18181B !important;
+    color: #FFFFFF !important;
+    border: 1px solid #18181B !important;
+    font-weight: 600 !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease !important;
+}
+
+.btn-followup-pulse:hover {
+    background: #27272A !important;
+    border-color: #27272A !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Mobile Responsive Optimization for Tracking & Analytics */
+@media (max-width: 768px) {
+    .tracking-hero-actions {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+    }
+
+    .tracking-hero-actions .btn {
+        flex: 1;
+        justify-content: center;
+        min-height: 38px;
+    }
+
+    .tracking-table-header {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .tracking-table-header .filter-pills {
+        width: 100%;
+    }
+
+    .deliverability-panel {
+        padding: 14px;
+    }
+
+    .deliverability-title-row {
+        gap: 8px;
+    }
+
+    .spam-score-gauge {
+        padding: 10px 12px;
+    }
+
+    .spam-score-num {
+        font-size: 28px;
+    }
+}
+
 
 

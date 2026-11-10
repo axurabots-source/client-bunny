@@ -208,6 +208,119 @@ app.get('/api/leads/:id/outreach-logs', async (req, res) => {
     }
 });
 
+// ==========================================================
+// 3.12. OUTREACH TRACKING & FOLLOW-UP ENGINE
+// ==========================================================
+const { OutreachTracker, TRANSPARENT_GIF } = require('./modules/tracking/tracker');
+
+// Open Tracking Pixel Endpoint
+app.get('/api/track/open/:token', (req, res) => {
+    const { token } = req.params;
+    
+    // Set headers to prevent caching by email clients/proxies
+    res.setHeader('Content-Type', 'image/gif');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.send(TRANSPARENT_GIF);
+
+    // Record open asynchronously
+    const userAgent = req.headers['user-agent'] || '';
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    OutreachTracker.recordOpen(token, { userAgent, ip }).catch(err => {
+        console.warn('[Tracking Pixel Error]:', err.message);
+    });
+});
+
+// Click Tracking Redirect Endpoint
+app.get('/api/track/click/:token', async (req, res) => {
+    const { token } = req.params;
+    const targetUrl = req.query.url;
+    const userAgent = req.headers['user-agent'] || '';
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+
+    const safeDestination = await OutreachTracker.recordClick(token, targetUrl, { userAgent, ip });
+    res.redirect(302, safeDestination);
+});
+
+// Outreach & Tracking KPI Analytics Overview
+app.get('/api/tracking/overview', async (req, res) => {
+    try {
+        const stats = await OutreachTracker.getTrackingOverview();
+        res.json({ success: true, stats });
+    } catch (err) {
+        console.error('Error fetching tracking overview:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Outreach & Tracking Live Activity Logs
+app.get('/api/tracking/logs', async (req, res) => {
+    try {
+        const { limit = 50, offset = 0, filter = 'all' } = req.query;
+        const logs = await OutreachTracker.getTrackedLogs({
+            limit: parseInt(limit, 10),
+            offset: parseInt(offset, 10),
+            filter
+        });
+        res.json({ success: true, count: logs.length, logs });
+    } catch (err) {
+        console.error('Error fetching tracked logs:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Pre-Send Spam & Deliverability Score Analyzer
+app.post('/api/tracking/analyze-spam', (req, res) => {
+    try {
+        const { subject = '', body = '' } = req.body || {};
+        const analysis = OutreachTracker.analyzeSpamRisk({ subject, body });
+        res.json({ success: true, analysis });
+    } catch (err) {
+        console.error('Error analyzing spam score:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Generate Contextual AI Follow-Up Pitch
+app.post('/api/leads/:id/generate-followup', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const lead = await LeadRepository.getLeadById(id);
+        if (!lead) {
+            return res.status(404).json({ success: false, error: 'Lead not found.' });
+        }
+
+        const cadence = lead.cadence || OutreachTracker.calculateCadence(lead);
+        const { generateFollowUpPitch } = require('./modules/m6_ai_engine/aiIntelligence');
+        
+        // Find previous outreach subject
+        const previousOutreach = (lead.outreach_logs && lead.outreach_logs.length > 0) ? lead.outreach_logs[0] : null;
+        const previousSubject = previousOutreach ? previousOutreach.subject : '';
+
+        const decisionMaker = (lead.decision_makers && lead.decision_makers.length > 0) ? lead.decision_makers[0] : null;
+
+        const followUp = await generateFollowUpPitch(lead, decisionMaker, {
+            step: cadence.currentStep || 1,
+            daysElapsed: cadence.daysElapsed || 3,
+            openCount: parseInt(lead.open_count, 10) || 0,
+            clickCount: parseInt(lead.click_count, 10) || 0,
+            previousSubject
+        });
+
+        res.json({
+            success: true,
+            followUp,
+            cadence,
+            inReplyTo: previousOutreach ? previousOutreach.id : null,
+            recipient: (decisionMaker && decisionMaker.email) ? decisionMaker.email : (lead.raw_data && lead.raw_data.email ? lead.raw_data.email : '')
+        });
+    } catch (err) {
+        console.error('Error generating follow-up pitch:', err);
+        res.status(500).json({ success: false, error: err.message || 'Failed to generate follow-up.' });
+    }
+});
+
 
 // 4. Location Taxonomy Hierarchy
 app.get('/api/locations', (req, res) => {
@@ -444,9 +557,14 @@ app.get('/api/hunt/stream', async (req, res) => {
 });
 
 
-// Fallback to index.html
+// Fallback to index.html with error safety
 app.use((req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
+        if (err && !res.headersSent) {
+            console.error('[Server] Failed to serve index.html:', err.message);
+            res.status(500).send('Client Bunny Dashboard Error: ' + err.message);
+        }
+    });
 });
 
 // Process-level Crash Guardians
@@ -488,3 +606,4 @@ if (require.main === module) {
 }
 
 module.exports = app;
+  

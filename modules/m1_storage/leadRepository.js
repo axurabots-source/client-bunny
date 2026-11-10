@@ -162,7 +162,7 @@ class LeadRepository {
         );
         lead.decision_makers = dmRes.rows;
 
-        // Attach outreach history
+        // Attach outreach history and tracking cadence
         try {
             const outRes = await pool.query(
                 `SELECT * FROM outreach_logs WHERE lead_id = $1 ORDER BY sent_at DESC, created_at DESC`,
@@ -172,6 +172,9 @@ class LeadRepository {
         } catch (e) {
             lead.outreach_logs = [];
         }
+
+        const { OutreachTracker } = require('../tracking/tracker');
+        lead.cadence = OutreachTracker.calculateCadence(lead);
 
         return lead;
     }
@@ -233,7 +236,11 @@ class LeadRepository {
         values.push(limit, offset);
 
         const res = await pool.query(query, values);
-        return res.rows;
+        const { OutreachTracker } = require('../tracking/tracker');
+        return res.rows.map(lead => {
+            lead.cadence = OutreachTracker.calculateCadence(lead);
+            return lead;
+        });
     }
 
     /**

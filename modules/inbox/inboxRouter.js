@@ -14,8 +14,10 @@ const { MetaReceiver } = require('./metaReceiver');
 const { dispatchColdEmail } = require('../m5_email_dispatcher/mailer');
 const { baileysManager } = require('./baileysManager');
 
-// Auto-start background IMAP email sync every 12 seconds
-EmailInboundSync.startAutoSync(12);
+// Auto-start background IMAP email sync every 12 seconds (only in persistent node servers, not serverless Vercel)
+if (!process.env.VERCEL) {
+    EmailInboundSync.startAutoSync(12);
+}
 
 // 1. Get Inbox Overview Stats (Total unread, counts by channel)
 router.get('/inbox/stats', async (req, res) => {

@@ -66,13 +66,30 @@ async function sendOutreachEmail(config, { leadId, decisionMakerId = null, to, s
         throw new Error("Email body content cannot be empty.");
     }
 
+    const { OutreachTracker } = require('../tracking/tracker');
     const transporter = createTransporter(config);
     const senderName = config.senderName ? config.senderName.trim() : '';
     const fromAddress = senderName ? `"${senderName}" <${config.user.trim()}>` : config.user.trim();
 
-    // Plain text + light HTML wrapper for optimal deliverability (inbox-focused, anti-spam)
-    const textContent = bodyText || bodyHtml.replace(/<[^>]*>/g, '');
-    const htmlContent = bodyHtml || `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #111827; white-space: pre-wrap;">${textContent}</div>`;
+    // Generate unique tracking token and inject 1x1 open pixel + wrapped click links
+    const trackingToken = leadId ? OutreachTracker.generateToken() : null;
+    const trackingBaseUrl = config.baseUrl || process.env.APP_BASE_URL || 'http://localhost:3000';
+    
+    let htmlContent = bodyHtml;
+    let textContent = bodyText || (bodyHtml ? bodyHtml.replace(/<[^>]*>/g, '') : '');
+
+    if (trackingToken) {
+        const prepared = OutreachTracker.prepareOutreachContent({
+            bodyHtml,
+            bodyText: textContent,
+            token: trackingToken,
+            baseUrl: trackingBaseUrl
+        });
+        htmlContent = prepared.html;
+        textContent = prepared.text;
+    } else if (!htmlContent) {
+        htmlContent = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #111827; white-space: pre-wrap;">${textContent}</div>`;
+    }
 
     const mailOptions = {
         from: fromAddress,
@@ -88,25 +105,30 @@ async function sendOutreachEmail(config, { leadId, decisionMakerId = null, to, s
     }
 
     try {
-        console.log(`📤 Dispatching cold email to ${to} via ${config.host || 'smtp.gmail.com'}...`);
+        console.log(`📤 Dispatching cold email to ${to} via ${config.host || 'smtp.gmail.com'} (Tracking Token: ${trackingToken ? trackingToken.substring(0, 8) + '...' : 'none'})...`);
         const info = await transporter.sendMail(mailOptions);
         console.log(`✅ Email delivered successfully! Message ID: ${info.messageId}`);
 
-        // 1. Record into outreach_logs in Supabase
+        // 1. Record into outreach_logs in Supabase with tracking token
         let logRecord = null;
         if (leadId) {
             try {
                 const logRes = await pool.query(`
-                    INSERT INTO outreach_logs (lead_id, decision_maker_id, channel, recipient_email, subject, body_content, status, sent_at)
-                    VALUES ($1, $2, 'email', $3, $4, $5, 'sent', NOW())
+                    INSERT INTO outreach_logs (lead_id, decision_maker_id, channel, recipient_email, subject, body_content, status, tracking_token, sent_at)
+                    VALUES ($1, $2, 'email', $3, $4, $5, 'sent', $6, NOW())
                     RETURNING *;
-                `, [leadId, decisionMakerId || null, to.trim(), subject.trim(), textContent]);
+                `, [leadId, decisionMakerId || null, to.trim(), subject.trim(), textContent, trackingToken]);
                 logRecord = logRes.rows[0];
 
-                // 2. Update lead status in leads table
+                // 2. Update lead status, last_contacted_at, and schedule next follow-up (3 days)
                 await pool.query(`
                     UPDATE leads 
-                    SET status = 'emailed', updated_at = NOW() 
+                    SET 
+                        status = CASE WHEN status = 'replied' THEN 'replied' ELSE 'emailed' END,
+                        last_contacted_at = NOW(),
+                        next_followup_due = NOW() + INTERVAL '3 days',
+                        followup_step = COALESCE(followup_step, 0) + 1,
+                        updated_at = NOW() 
                     WHERE id = $1;
                 `, [leadId]);
             } catch (dbErr) {

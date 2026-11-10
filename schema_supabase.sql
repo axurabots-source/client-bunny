@@ -20,8 +20,14 @@ CREATE TABLE IF NOT EXISTS leads (
     gmb_owner_name TEXT,
     gmb_link TEXT,
     pain_points JSONB DEFAULT '[]'::jsonb, -- e.g. ["no_website", "low_rating", "reputation_risk"]
-    status TEXT DEFAULT 'new',             -- 'new', 'enriched', 'pitched', 'emailed', 'replied', 'dead'
+    status TEXT DEFAULT 'new',             -- 'new', 'enriched', 'pitched', 'emailed', 'opened', 'replied', 'dead'
     raw_data JSONB DEFAULT '{}'::jsonb,    -- stores original scraped payload (reviews, timings, etc.)
+    last_contacted_at TIMESTAMPTZ,         -- when the most recent outreach email was sent
+    last_opened_at TIMESTAMPTZ,            -- when the lead last opened an outreach email
+    open_count INTEGER DEFAULT 0,          -- total times lead opened outreach emails
+    click_count INTEGER DEFAULT 0,         -- total times lead clicked links
+    followup_step INTEGER DEFAULT 0,       -- 0: initial pitch, 1: follow-up 1, 2: follow-up 2, etc.
+    next_followup_due TIMESTAMPTZ,         -- dynamic due date for next follow-up
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -31,6 +37,8 @@ CREATE INDEX IF NOT EXISTS idx_leads_city ON leads(city);
 CREATE INDEX IF NOT EXISTS idx_leads_category ON leads(category);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_leads_pain_points ON leads USING GIN(pain_points);
+CREATE INDEX IF NOT EXISTS idx_leads_last_contacted ON leads(last_contacted_at);
+CREATE INDEX IF NOT EXISTS idx_leads_next_followup ON leads(next_followup_due);
 
 -- 2. DECISION MAKERS TABLE (Owner / Doctors / Key Contacts)
 CREATE TABLE IF NOT EXISTS decision_makers (
@@ -62,6 +70,16 @@ CREATE TABLE IF NOT EXISTS outreach_logs (
     subject TEXT,
     body_content TEXT,
     status TEXT DEFAULT 'queued',          -- queued, sent, failed, opened, replied
+    tracking_token TEXT UNIQUE,            -- unique token for open/click tracking
+    opened_at TIMESTAMPTZ,                 -- first time opened
+    last_opened_at TIMESTAMPTZ,            -- last time opened
+    open_count INTEGER DEFAULT 0,          -- open count
+    clicked_at TIMESTAMPTZ,                -- first time clicked
+    last_clicked_at TIMESTAMPTZ,           -- last time clicked
+    click_count INTEGER DEFAULT 0,         -- click count
+    user_agent TEXT,                       -- device / email client
+    ip_hash TEXT,                          -- hashed ip for bot deduplication
+    is_bot_scan BOOLEAN DEFAULT false,     -- bot / pre-fetch scanner flag
     error_message TEXT,
     sent_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -69,6 +87,7 @@ CREATE TABLE IF NOT EXISTS outreach_logs (
 
 CREATE INDEX IF NOT EXISTS idx_outreach_lead_id ON outreach_logs(lead_id);
 CREATE INDEX IF NOT EXISTS idx_outreach_status ON outreach_logs(status);
+CREATE INDEX IF NOT EXISTS idx_outreach_tracking_token ON outreach_logs(tracking_token);
 
 -- 4. SCRAPING JOBS TABLE (Session Tracking)
 CREATE TABLE IF NOT EXISTS scraping_jobs (

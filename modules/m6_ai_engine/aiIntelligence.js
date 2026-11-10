@@ -56,6 +56,15 @@ Text:
     return null;
 }
 
+function formatHonorificName(rawName) {
+    if (!rawName || typeof rawName !== 'string') return '';
+    const parts = rawName.trim().split(/\s+/);
+    if (parts.length > 1 && ['dr.', 'dr', 'prof.', 'prof', 'engr.', 'engr'].includes(parts[0].toLowerCase())) {
+        return `${parts[0]} ${parts[1]}`;
+    }
+    return parts[0];
+}
+
 /**
  * 2. MODULE 6: Multi-Channel Outreach Pitch Engine (Gemini Flash + Groq Qwen)
  * Implements the strict 3-step high-converting framework:
@@ -66,9 +75,8 @@ Text:
 async function generateMultiChannelPitch(lead, decisionMaker = null) {
     const businessTitle = lead.title || 'your practice';
     const city = lead.city || 'your area';
-    const ownerName = (decisionMaker && decisionMaker.full_name) 
-        ? decisionMaker.full_name.split(' ')[0] 
-        : (lead.gmb_owner_name ? lead.gmb_owner_name.split(' ')[0] : '');
+    const rawFullName = (decisionMaker && decisionMaker.full_name) ? decisionMaker.full_name : (lead.gmb_owner_name || '');
+    const ownerName = formatHonorificName(rawFullName);
     const greeting = ownerName ? `Hi ${ownerName},` : `Hi there,`;
     const rating = lead.review_rating || '4.8';
     const reviews = lead.review_count || 15;
@@ -172,6 +180,99 @@ Generate high-converting outreach copy adhering strictly to the 3-step framework
 }
 
 /**
+ * 3. MODULE 6 EXTENSION: Smart Follow-Up Pitch Engine (Contextual to Opens & Age)
+ * Follows the 3-Tier Outreach Cadence:
+ * - Step 1 (Day 3): Gentle bump (different if opened vs unopened)
+ * - Step 2 (Day 7): Case study & value proposition
+ * - Step 3 (Day 14): Polite breakup email
+ */
+async function generateFollowUpPitch(lead, decisionMaker = null, { step = 1, daysElapsed = 3, openCount = 0, clickCount = 0, previousSubject = '' } = {}) {
+    const businessTitle = lead.title || 'your practice';
+    const city = lead.city || 'your area';
+    const rawFullName = (decisionMaker && decisionMaker.full_name) ? decisionMaker.full_name : (lead.gmb_owner_name || '');
+    const ownerName = formatHonorificName(rawFullName);
+    const greeting = ownerName ? `Hi ${ownerName},` : `Hi there,`;
+
+    let threadedSubject = previousSubject ? (previousSubject.startsWith('Re:') ? previousSubject : `Re: ${previousSubject}`) : `Re: quick question re: ${businessTitle}`;
+
+    const hasOpened = openCount > 0;
+    const hasClicked = clickCount > 0;
+
+    const followUpSystemPrompt = `You are an elite B2B sales copywriter writing follow-up emails for agency outreach.
+The follow-up must be conversational, short (under 75 words), and ultra-relevant.
+NEVER sound passive-aggressive ("Just checking if you saw my email" is strictly forbidden).
+
+Context:
+- Target Business: ${businessTitle} in ${city}
+- Owner Name: ${ownerName || 'Friend'}
+- Days Elapsed Since First Contact: ${daysElapsed} days
+- Follow-up Cadence Stage: Step ${step}
+- Engagement: ${hasClicked ? 'Lead clicked links in prior email' : (hasOpened ? 'Lead opened prior email ' + openCount + ' times' : 'Lead has not opened prior email')}
+
+Cadence Directives:
+${step === 1 ? `Step 1 (Day 3-5 Bump):
+- If Opened: Acknowledge they had a moment to look over your prior note. Offer a quick 2-minute Loom/walkthrough to save them time.
+- If Unopened: Friendly 2-sentence bump asking if they are the best person to speak with regarding local search bookings.` : ''}
+
+${step === 2 ? `Step 2 (Day 7-10 Value Add):
+- Share a short 1-sentence proof/case study: "We helped a practice in ${city} add 14 new booked patients last month by capturing local searchers."
+- Ask if Tuesday or Wednesday at 2 PM works for a brief look.` : ''}
+
+${step >= 3 ? `Step 3 (Day 14+ Polite Breakup):
+- State clearly and respectfully that you don't want to flood their inbox, so you'll assume this isn't a top priority right now and close their file.
+- Leave the door open if things change down the road.` : ''}
+
+Return ONLY a valid JSON object matching this schema:
+{
+  "subject_line": "${threadedSubject}",
+  "email_body": "punchy 2-to-3 sentence follow-up body",
+  "recommended_step": ${step}
+}`;
+
+    // 1. Try Gemini Flash if key is configured
+    if (GEMINI_API_KEY && !GEMINI_API_KEY.startsWith('AQ.')) {
+        try {
+            const geminiRes = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                contents: [{ parts: [{ text: followUpSystemPrompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    temperature: 0.35
+                }
+            }, { timeout: 8000 });
+
+            const geminiText = geminiRes.data.candidates[0].content.parts[0].text;
+            const parsed = JSON.parse(geminiText);
+            if (parsed.email_body) {
+                parsed.subject_line = threadedSubject;
+                return parsed;
+            }
+        } catch (geminiErr) {
+            console.warn("Gemini Flash follow-up note:", geminiErr.message);
+        }
+    }
+
+    // 2. High-Converting Fallback Templates (Tuned to Opens & Cadence)
+    let fallbackBody = '';
+    if (step === 1) {
+        if (hasOpened) {
+            fallbackBody = `${greeting}\n\nSaw you had a chance to look over my note regarding ${businessTitle}'s online patient booking flow.\n\nI put together a quick 2-minute video breakdown showing exactly what we'd tweak to capture more high-intent local patients.\n\nShould I send the link over?`;
+        } else {
+            fallbackBody = `${greeting}\n\nWanted to float this back to the top of your inbox in case you missed my previous note about capturing unbooked patient searches for ${businessTitle}.\n\nDoes Thursday at 11 AM work for a quick 5-minute chat, or should I reach out to someone else on your team?`;
+        }
+    } else if (step === 2) {
+        fallbackBody = `${greeting}\n\nQuick follow-up — we recently implemented this booking workflow for another healthcare provider in ${city} and saw a 32% increase in new appointment inquiries in the first 30 days.\n\nHappy to share the exact setup we used. Does Tuesday at 2 PM work for 10 minutes?`;
+    } else {
+        fallbackBody = `${greeting}\n\nSince I haven't heard back, I'm assuming capturing extra local search bookings isn't a priority for ${businessTitle} right now.\n\nI don't want to clutter your inbox, so I'll close out your file. If your schedule opens up down the road, feel free to reach back out.\n\nWishing you and the team continued success!`;
+    }
+
+    return {
+        subject_line: threadedSubject,
+        email_body: fallbackBody,
+        recommended_step: step
+    };
+}
+
+/**
  * Backward compatibility helper
  */
 async function generateColdPitch(lead, decisionMaker = null) {
@@ -182,5 +283,6 @@ async function generateColdPitch(lead, decisionMaker = null) {
 module.exports = {
     parseBioWithAI,
     generateColdPitch,
-    generateMultiChannelPitch
+    generateMultiChannelPitch,
+    generateFollowUpPitch
 };

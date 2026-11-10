@@ -225,7 +225,7 @@ function initNavigation() {
         { el: navHunt, screen: 'hunt', title: 'Hunt Launchpad' },
         { el: navLists, screen: 'lists', title: 'Lists' },
         { el: navInbox, screen: 'inbox', title: 'Omnichannel Inbox' },
-        { el: navAnalytics, screen: 'analytics', title: 'Analytics' }
+        { el: navAnalytics, screen: 'analytics', title: 'Tracking & Analytics' }
     ];
 
     navItems.forEach(item => {
@@ -312,8 +312,8 @@ function switchScreen(screenName) {
             renderLists();
         } else if (screenName === 'analytics') {
             screenAnalytics.classList.add('active');
-            breadcrumbTitle.textContent = 'Analytics';
-            renderAnalytics();
+            breadcrumbTitle.textContent = 'Tracking & Analytics';
+            loadTrackingDashboard();
         }
     }
 }
@@ -579,14 +579,14 @@ function renderLists() {
     `).join('');
 }
 
-window.viewListLeads = function(listName) {
+window.viewListLeads = function (listName) {
     currentListFilter = listName;
     listFilterSelect.value = listName;
     switchScreen('leads');
     applyFilters();
 };
 
-window.deleteList = async function(id, name) {
+window.deleteList = async function (id, name) {
     const confirmed = confirm(`Are you sure you want to permanently delete list "${name}" and all of its leads from Supabase? This action cannot be undone.`);
     if (!confirmed) return;
 
@@ -713,7 +713,7 @@ function renderJobs(jobs) {
 
     jobsList.innerHTML = jobs.map(j => {
         const timeAgo = formatTimeAgo(new Date(j.created_at));
-        const statusBadge = j.status === 'completed' 
+        const statusBadge = j.status === 'completed'
             ? `<span class="job-status-badge completed">Completed</span>`
             : `<span class="job-status-badge running">Running</span>`;
 
@@ -788,7 +788,7 @@ function bindEvents() {
                         niche: huntNiche.value.trim()
                     })
                 });
-            } catch (err) {}
+            } catch (err) { }
         }
 
         if (!targetListName) {
@@ -897,7 +897,7 @@ function bindEvents() {
                     restoreHuntBtn();
                     const newCount = data.newLeadsCount !== undefined ? data.newLeadsCount : (data.total_found || 0);
                     const skipped = data.skippedDuplicates || 0;
-                    
+
                     if (newCount === 0) {
                         if (liveHuntStatusText) liveHuntStatusText.textContent = data.message || 'Area fully covered. All businesses already saved in this list.';
                         showToast(data.message || 'Area fully covered. No duplicate leads added.');
@@ -960,17 +960,19 @@ function applyFilters(incomingLeadId = null) {
             matchesPill = painPoints.includes('high_ticket_spender');
         } else if (currentFilter === 'reputation_risk') {
             matchesPill = painPoints.includes('reputation_risk');
+        } else if (currentFilter === 'enriched') {
+            matchesPill = (lead.status === 'enriched' || (lead.decision_makers && lead.decision_makers.length > 0));
         }
 
         return matchesQuery && matchesPill;
     });
 
-    
+
     // Update Active List Bar
     const activeListNameDisplay = document.getElementById('activeListNameDisplay');
     const activeListCountDisplay = document.getElementById('activeListCountDisplay');
     const reHuntListBtn = document.getElementById('reHuntListBtn');
-    
+
     if (activeListNameDisplay) {
         activeListNameDisplay.textContent = currentListFilter === 'all' ? 'All Campaign Lists' : currentListFilter;
     }
@@ -986,10 +988,14 @@ function applyFilters(incomingLeadId = null) {
 }
 
 function updateFilterCounts() {
-    countAll.textContent = allLeads.length;
-    countNoWeb.textContent = allLeads.filter(l => (l.pain_points || []).includes('no_website')).length;
-    countHigh.textContent = allLeads.filter(l => (l.pain_points || []).includes('high_ticket_spender')).length;
-    countRisk.textContent = allLeads.filter(l => (l.pain_points || []).includes('reputation_risk')).length;
+    if (countAll) countAll.textContent = allLeads.length;
+    if (countNoWeb) countNoWeb.textContent = allLeads.filter(l => (l.pain_points || []).includes('no_website')).length;
+    if (countHigh) countHigh.textContent = allLeads.filter(l => (l.pain_points || []).includes('high_ticket_spender')).length;
+    if (countRisk) countRisk.textContent = allLeads.filter(l => (l.pain_points || []).includes('reputation_risk')).length;
+    const countEnrichedEl = document.getElementById('countEnriched');
+    if (countEnrichedEl) {
+        countEnrichedEl.textContent = allLeads.filter(l => l.status === 'enriched' || (l.decision_makers && l.decision_makers.length > 0)).length;
+    }
 }
 
 function updateStatsLocally() {
@@ -1098,7 +1104,7 @@ function renderTable(leads, incomingLeadId = null) {
                         <div style="display: flex; flex-direction: column; gap: 2px;">
                             <span style="font-weight: 600; color: #18181B; font-size: 13px;">${escapeHtml(firstDm.full_name)}</span>
                             <span style="font-size: 11px; color: #71717A;">${escapeHtml(firstDm.title_role || 'Owner / Director')}</span>
-                            ${firstDm.email ? `<span style="font-size: 11px; color: #15803D; font-weight: 500;">✉ ${escapeHtml(firstDm.email)}</span>` : '<span style="font-size: 11px; color: #A1A1AA;">Email unlisted</span>'}
+                            ${firstDm.email ? `<span style="font-size: 11px; color: #15803D; font-weight: 500; display: inline-flex; align-items: center; gap: 3px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> ${escapeHtml(firstDm.email)}</span>` : '<span style="font-size: 11px; color: #A1A1AA;">Email unlisted</span>'}
                         </div>
                     ` : `
                         <div style="display: flex; flex-direction: column; gap: 2px;">
@@ -1107,19 +1113,19 @@ function renderTable(leads, incomingLeadId = null) {
                         </div>
                     `}
                 </td>
-                <td>
-                    <span class="badge-status badge-status-${lead.status || 'new'}">${lead.status || 'new'}</span>
-                </td>
                 <td style="text-align: right;" onclick="event.stopPropagation();">
                     <div class="table-action-cluster">
                         <button class="btn-row-action" title="Deep Enrich (Crawl website + Search Dork)" onclick="triggerRowDeepEnrich(${lead.id}, this)">
-                            <span>⚡ Enrich</span>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            <span>Enrich</span>
                         </button>
                         <button class="btn-row-action" title="Generate or Review AI Pitch (Editable)" onclick="openPitchModal(${lead.id})">
-                            <span>✨ Pitch</span>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                            <span>Pitch</span>
                         </button>
                         <button class="btn-row-action primary" title="Send or Queue Cold Email" onclick="openEmailComposerModal(${lead.id})">
-                            <span>✉️ Email</span>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                            <span>Email</span>
                         </button>
                         <button class="btn-row-action" title="View Full Dossier" onclick="openLeadDetail(${lead.id})">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -1134,10 +1140,10 @@ function renderTable(leads, incomingLeadId = null) {
 // ==========================================================
 // 7. SLIDE-OVER LEAD DETAIL DRAWER
 // ==========================================================
-window.openLeadDetail = async function(id) {
+window.openLeadDetail = async function (id) {
     drawerTitle.textContent = 'Loading profile...';
     drawerBody.innerHTML = '<div class="table-loading">Fetching lead dossier from Supabase...</div>';
-    
+
     leadDrawer.classList.add('open');
     drawerOverlay.classList.add('open');
 
@@ -1159,7 +1165,7 @@ function renderDrawerContent(lead) {
     const mapsUrl = getDirectMapsUrl(lead);
 
     const dms = lead.decision_makers || [];
-    const dmHtml = dms.length === 0 
+    const dmHtml = dms.length === 0
         ? `<p style="font-size: 13px; color: var(--text-secondary);">No individual decision makers discovered yet. Run Full Waterfall Enrich below.</p>`
         : dms.map(dm => `
             <div class="detail-box" style="margin-bottom: 8px; border-left: 3px solid #18181B;">
@@ -1314,7 +1320,7 @@ function renderDrawerContent(lead) {
 }
 
 
-window.copyPitchText = function(btn) {
+window.copyPitchText = function (btn) {
     const textEl = document.getElementById('pitchBodyText');
     if (!textEl) return;
     const text = textEl.innerText.trim();
@@ -1328,7 +1334,7 @@ window.copyPitchText = function(btn) {
     });
 };
 
-window.triggerFullEnrich = async function(id) {
+window.triggerFullEnrich = async function (id) {
     const btn = document.getElementById('fullEnrichBtn');
     if (btn) {
         btn.disabled = true;
@@ -1368,7 +1374,7 @@ window.triggerFullEnrich = async function(id) {
     }
 };
 
-window.triggerCrawl = async function(id) {
+window.triggerCrawl = async function (id) {
     const btn = document.getElementById('crawlBtn');
     btn.disabled = true;
     btn.innerHTML = `<span>Crawling 3 Pages...</span>`;
@@ -1394,7 +1400,7 @@ window.triggerCrawl = async function(id) {
     }
 };
 
-window.triggerDork = async function(id) {
+window.triggerDork = async function (id) {
     const btn = document.getElementById('dorkBtn');
     btn.disabled = true;
     btn.innerHTML = `<span>Searching Bing/LinkedIn...</span>`;
@@ -1481,36 +1487,390 @@ function renderAnalytics() {
             <div>
                 <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
                     <span>Website Design Candidates (No Website)</span>
-                    <strong>${noWeb} (${Math.round((noWeb/total)*100)}%)</strong>
+                    <strong>${noWeb} (${Math.round((noWeb / total) * 100)}%)</strong>
                 </div>
                 <div style="height: 6px; background: #F4F4F5; border-radius: 4px; overflow: hidden;">
-                    <div style="height: 100%; width: ${(noWeb/total)*100}%; background: #000;"></div>
+                    <div style="height: 100%; width: ${(noWeb / total) * 100}%; background: #000;"></div>
                 </div>
             </div>
             <div>
                 <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
                     <span>High-Ticket Retainer Prospects</span>
-                    <strong>${high} (${Math.round((high/total)*100)}%)</strong>
+                    <strong>${high} (${Math.round((high / total) * 100)}%)</strong>
                 </div>
                 <div style="height: 6px; background: #F4F4F5; border-radius: 4px; overflow: hidden;">
-                    <div style="height: 100%; width: ${(high/total)*100}%; background: #000;"></div>
+                    <div style="height: 100%; width: ${(high / total) * 100}%; background: #000;"></div>
                 </div>
             </div>
             <div>
                 <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
                     <span>Review Recovery Pitch (Reputation Risk)</span>
-                    <strong>${rep} (${Math.round((rep/total)*100)}%)</strong>
+                    <strong>${rep} (${Math.round((rep / total) * 100)}%)</strong>
                 </div>
                 <div style="height: 6px; background: #F4F4F5; border-radius: 4px; overflow: hidden;">
-                    <div style="height: 100%; width: ${(rep/total)*100}%; background: #000;"></div>
+                    <div style="height: 100%; width: ${(rep / total) * 100}%; background: #000;"></div>
                 </div>
             </div>
         </div>
     `;
 }
 
+// ==========================================================
+// MODULE: OUTREACH TRACKING & ANALYTICS DASHBOARD
+// ==========================================================
+let currentTrackFilter = 'all';
+let allTrackedLogs = [];
+let trackingStatsData = null;
 
-window.reHuntList = function(listName) {
+async function loadTrackingDashboard(forceRefresh = false) {
+    const tbody = document.getElementById('trackingTbody');
+    if (tbody && (forceRefresh || allTrackedLogs.length === 0)) {
+        tbody.innerHTML = '<tr><td colspan="5" class="table-loading">Loading live outreach activity & cadence...</td></tr>';
+    }
+
+    try {
+        // 1. Fetch Overview KPIs
+        const statsRes = await fetch('/api/tracking/overview');
+        const statsJson = await statsRes.json();
+        if (statsJson.success && statsJson.stats) {
+            trackingStatsData = statsJson.stats;
+            renderTrackingKpis(statsJson.stats);
+        }
+
+        // 2. Fetch Tracked Logs
+        await loadTrackingLogs(currentTrackFilter);
+
+        // 3. Render secondary pipeline distribution
+        renderAnalytics();
+    } catch (err) {
+        console.error('Error loading tracking dashboard:', err);
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="5" class="table-loading" style="color: #EF4444;">Failed to load tracking data: ${escapeHtml(err.message)}</td></tr>`;
+        }
+    }
+}
+
+function renderTrackingKpis(stats) {
+    if (!stats) return;
+
+    const kpiTotalSent = document.getElementById('kpiTotalSent');
+    const kpiOpenRate = document.getElementById('kpiOpenRate');
+    const kpiTotalOpened = document.getElementById('kpiTotalOpened');
+    const kpiAggregateOpens = document.getElementById('kpiAggregateOpens');
+    const kpiClickRate = document.getElementById('kpiClickRate');
+    const kpiTotalClicked = document.getElementById('kpiTotalClicked');
+    const kpiAggregateClicks = document.getElementById('kpiAggregateClicks');
+    const kpiReplyRate = document.getElementById('kpiReplyRate');
+    const kpiTotalReplied = document.getElementById('kpiTotalReplied');
+    const kpiFollowupDue = document.getElementById('kpiFollowupDue');
+    const sidebarTrackingBadge = document.getElementById('sidebarTrackingBadge');
+
+    if (kpiTotalSent) kpiTotalSent.textContent = stats.total_sent || 0;
+    if (kpiOpenRate) kpiOpenRate.textContent = `${stats.open_rate_pct || 0}%`;
+    if (kpiTotalOpened) kpiTotalOpened.textContent = stats.total_opened || 0;
+    if (kpiAggregateOpens) kpiAggregateOpens.textContent = stats.aggregate_opens || 0;
+    if (kpiClickRate) kpiClickRate.textContent = `${stats.click_rate_pct || 0}%`;
+    if (kpiTotalClicked) kpiTotalClicked.textContent = stats.total_clicked || 0;
+    if (kpiAggregateClicks) kpiAggregateClicks.textContent = stats.aggregate_clicks || 0;
+    if (kpiReplyRate) kpiReplyRate.textContent = `${stats.reply_rate_pct || 0}%`;
+    if (kpiTotalReplied) kpiTotalReplied.textContent = stats.total_replied || 0;
+    if (kpiFollowupDue) kpiFollowupDue.textContent = stats.followup_due || 0;
+
+    if (sidebarTrackingBadge) {
+        if (stats.followup_due > 0) {
+            sidebarTrackingBadge.textContent = `${stats.followup_due} due`;
+            sidebarTrackingBadge.style.display = 'inline-block';
+        } else {
+            sidebarTrackingBadge.style.display = 'none';
+        }
+    }
+}
+
+async function loadTrackingLogs(filter = 'all') {
+    currentTrackFilter = filter;
+    const tbody = document.getElementById('trackingTbody');
+    const showingEl = document.getElementById('showingTrackingCount');
+
+    try {
+        const res = await fetch(`/api/tracking/logs?limit=100&filter=${encodeURIComponent(filter)}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.logs)) {
+            allTrackedLogs = data.logs;
+            renderTrackingTable(data.logs);
+            updateTrackingFilterBadges();
+            if (showingEl) showingEl.textContent = `Showing ${data.logs.length} tracked outreaches`;
+        } else {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="table-loading">No tracked outreach activity found.</td></tr>';
+        }
+    } catch (err) {
+        console.error('Error fetching logs:', err);
+        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="table-loading" style="color: #EF4444;">Error: ${err.message}</td></tr>`;
+    }
+}
+
+function renderTrackingTable(logs) {
+    const tbody = document.getElementById('trackingTbody');
+    if (!tbody) return;
+
+    if (!logs || logs.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 48px 20px; color: var(--text-secondary);">
+                    <div style="width: 44px; height: 44px; border-radius: 50%; background: #F4F4F5; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; color: var(--text-secondary);">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6z"></path><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+                    </div>
+                    <strong style="color: var(--text-primary); font-size: 14px; display: block; margin-bottom: 4px;">No Outreach Activity Yet</strong>
+                    <span style="font-size: 12px; color: var(--text-secondary);">Send cold pitches from the Leads dashboard. Real-time opens, clicks, and cadence triggers will populate here automatically.</span>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = logs.map(log => {
+        const opens = parseInt(log.open_count, 10) || 0;
+        const clicks = parseInt(log.click_count, 10) || 0;
+        const sentTimeStr = log.sent_at ? formatTimeAgo(log.sent_at) : 'recently';
+        const lastOpenStr = log.last_opened_at ? formatTimeAgo(log.last_opened_at) : (log.opened_at ? formatTimeAgo(log.opened_at) : null);
+        const lastClickStr = log.last_clicked_at ? formatTimeAgo(log.last_clicked_at) : null;
+
+        const cadence = log.cadence || {
+            badgeLabel: log.outreach_status || 'Sent',
+            badgeClass: 'badge-waiting',
+            isActionRequired: false,
+            daysElapsed: 0
+        };
+
+        const isActionDue = cadence.isActionRequired && log.lead_status !== 'replied';
+
+        return `
+            <tr class="tracking-row ${isActionDue ? 'row-due-highlight' : ''}" onclick="openLeadDetail(${log.lead_id})">
+                <td>
+                    <div class="lead-title-box">
+                        <div class="lead-title-row">
+                            <span class="lead-name">${escapeHtml(log.business_name || 'Business')}</span>
+                        </div>
+                        <span style="font-size: 11px; color: #047857; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                            ${escapeHtml(log.recipient || 'No email')}
+                        </span>
+                        <span style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                            ${escapeHtml(log.city || '')}${log.country ? `, ${escapeHtml(log.country)}` : ''} • Channel: ${escapeHtml(log.channel || 'email').toUpperCase()}
+                        </span>
+                    </div>
+                </td>
+                <td>
+                    <div style="display: flex; flex-direction: column; gap: 3px;">
+                        <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);" title="${escapeHtml(log.subject || '')}">
+                            ${escapeHtml(log.subject || 'Cold Pitch')}
+                        </span>
+                        <span style="font-size: 11px; color: var(--text-secondary);">
+                            Dispatched ${sentTimeStr}
+                        </span>
+                    </div>
+                </td>
+                <td>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div class="tracking-mini-pills">
+                            ${opens > 0 ? `
+                                <span class="mini-track-pill pill-opened" title="Opened ${opens} times. Last read ${lastOpenStr}">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                    ${opens} open${opens > 1 ? 's' : ''} ${lastOpenStr ? `(${lastOpenStr})` : ''}
+                                </span>
+                            ` : `
+                                <span class="mini-track-pill pill-unopened">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                    Unopened
+                                </span>
+                            `}
+                            ${clicks > 0 ? `
+                                <span class="mini-track-pill pill-clicked" title="Clicked ${clicks} times. ${lastClickStr ? `Last clicked ${lastClickStr}` : ''}">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                    ${clicks} click${clicks > 1 ? 's' : ''}
+                                </span>
+                            ` : ''}
+                        </div>
+                        ${log.is_bot_scan ? `
+                            <span style="font-size: 10px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 3px;" title="Automated security bots filtered out">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                Bot scanner filtered
+                            </span>
+                        ` : ''}
+                    </div>
+                </td>
+                <td>
+                    <div class="cadence-cell-box" title="${escapeHtml(cadence.tooltip || '')}">
+                        <span class="cadence-badge ${cadence.badgeClass}">${escapeHtml(cadence.badgeLabel)}</span>
+                    </div>
+                </td>
+                <td style="text-align: right;" onclick="event.stopPropagation();">
+                    <div class="table-action-cluster" style="justify-content: flex-end;">
+                        ${isActionDue ? `
+                            <button class="btn-row-action btn-followup-pulse" title="Generate & Send AI Threaded Follow-Up (${cadence.daysElapsed || 3}d elapsed)" onclick="triggerRowFollowUp(${log.lead_id})">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span>Follow-Up</span>
+                            </button>
+                        ` : ''}
+                        <button class="btn-row-action" title="View in Omnichannel Inbox" onclick="switchScreen('inbox')">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                            <span>Inbox</span>
+                        </button>
+                        <button class="btn-row-action" title="View Full Dossier" onclick="openLeadDetail(${log.lead_id})">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function updateTrackingFilterBadges() {
+    const countTrackAll = document.getElementById('countTrackAll');
+    const countTrackDue = document.getElementById('countTrackDue');
+    const countTrackOpened = document.getElementById('countTrackOpened');
+    const countTrackClicked = document.getElementById('countTrackClicked');
+    const countTrackReplied = document.getElementById('countTrackReplied');
+
+    if (countTrackAll) countTrackAll.textContent = allTrackedLogs.length;
+    if (countTrackDue) countTrackDue.textContent = allTrackedLogs.filter(l => l.cadence && l.cadence.isActionRequired && l.lead_status !== 'replied').length;
+    if (countTrackOpened) countTrackOpened.textContent = allTrackedLogs.filter(l => (parseInt(l.open_count, 10) || 0) > 0).length;
+    if (countTrackClicked) countTrackClicked.textContent = allTrackedLogs.filter(l => (parseInt(l.click_count, 10) || 0) > 0).length;
+    if (countTrackReplied) countTrackReplied.textContent = allTrackedLogs.filter(l => l.outreach_status === 'replied' || l.lead_status === 'replied').length;
+}
+
+window.triggerRowFollowUp = async function (leadId) {
+    let lead = allLeads.find(l => l.id == leadId);
+    if (!lead) {
+        try {
+            const r = await fetch(`/api/leads/${leadId}`);
+            const d = await r.json();
+            if (d.success && d.lead) lead = d.lead;
+        } catch (_) {}
+    }
+
+    if (!lead) {
+        showToast('Lead details not found.');
+        return;
+    }
+
+    showToast(`Generating AI follow-up for ${lead.title}...`);
+
+    try {
+        const res = await fetch(`/api/leads/${leadId}/generate-followup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success && data.followUp) {
+            activeComposerLead = lead;
+            const modal = document.getElementById('emailComposerModalOverlay');
+            const toInput = document.getElementById('composerTo');
+            const subjectInput = document.getElementById('composerSubject');
+            const msgInput = document.getElementById('composerMessage');
+            const titleEl = document.getElementById('composerTitle');
+
+            if (titleEl) {
+                const days = data.cadence ? data.cadence.daysElapsed : 3;
+                const opens = lead.open_count || 0;
+                titleEl.textContent = `AI Follow-Up (Step ${data.followUp.recommended_step || 1} • ${days}d elapsed • ${opens} opens)`;
+            }
+            if (toInput) toInput.value = data.recipient || (lead.decision_makers && lead.decision_makers[0] ? lead.decision_makers[0].email : '') || '';
+            if (subjectInput) subjectInput.value = data.followUp.subject_line || `Re: quick question re: ${lead.title}`;
+            if (msgInput) msgInput.value = data.followUp.email_body || '';
+
+            if (modal) modal.style.display = 'flex';
+            showToast(`Threaded follow-up ready! Step ${data.followUp.recommended_step || 1}`);
+        } else {
+            showToast('Follow-up generation error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        showToast('Error generating follow-up: ' + err.message);
+    }
+};
+
+window.filterTrackingTable = function (filter, btn) {
+    document.querySelectorAll('#trackingFilterPills .filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    loadTrackingLogs(filter);
+};
+
+window.toggleSpamCheckerModal = function () {
+    const panel = document.getElementById('spamCheckerPanel');
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+};
+
+window.runSpamAnalysis = async function () {
+    const subject = (document.getElementById('spamCheckSubject')?.value || '').trim();
+    const body = (document.getElementById('spamCheckBody')?.value || '').trim();
+
+    if (!subject && !body) {
+        showToast('Please enter a subject or body to analyze.');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/tracking/analyze-spam', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject, body })
+        });
+        const data = await res.json();
+        if (data.success && data.analysis) {
+            const an = data.analysis;
+            const scoreEl = document.getElementById('spamScoreNum');
+            const badgeEl = document.getElementById('spamScoreBadge');
+            const flagsListEl = document.getElementById('spamFlagsList');
+
+            if (scoreEl) scoreEl.textContent = an.score;
+            if (badgeEl) {
+                badgeEl.textContent = `${an.grade} ${an.status}`;
+                badgeEl.style.color = an.statusColor;
+            }
+            if (flagsListEl) {
+                flagsListEl.innerHTML = an.flags.map(f => {
+                    const isWarning = an.score < 85;
+                    return `
+                        <div class="spam-flag-item ${isWarning ? 'warning' : 'safe'}">
+                            ${isWarning ? `
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            ` : `
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            `}
+                            <span>${escapeHtml(f)}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+            showToast(`Analysis Complete: Score ${an.score}/100 (${an.grade})`);
+        }
+    } catch (err) {
+        showToast('Spam analysis failed: ' + err.message);
+    }
+};
+
+window.toggleAnalyticsSecondary = function () {
+    const grid = document.getElementById('analyticsSecondaryGrid');
+    const arrow = document.getElementById('analyticsSecondaryArrow');
+    if (!grid) return;
+    const isHidden = grid.style.display === 'none';
+    grid.style.display = isHidden ? 'grid' : 'none';
+    if (arrow) arrow.textContent = isHidden ? 'Collapse View' : 'Expand View';
+};
+
+function formatTimeAgo(dateStr) {
+    if (!dateStr) return '';
+    const diff = Math.floor((new Date() - new Date(dateStr)) / 1000);
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    const days = Math.floor(diff / 86400);
+    return `${days}d ago`;
+}
+
+
+window.reHuntList = function (listName) {
     switchScreen('hunt');
     if (huntListSelect) huntListSelect.value = listName;
     const found = allLists.find(x => x.name === listName);
@@ -1530,13 +1890,13 @@ window.reHuntList = function(listName) {
     showToast('Ready to re-hunt into list: "' + listName + '". Duplicates will be skipped!');
 };
 
-window.reHuntCurrentList = function() {
+window.reHuntCurrentList = function () {
     if (currentListFilter && currentListFilter !== 'all') {
         const found = allLists.find(l => l.name === currentListFilter);
         window.reHuntList(
-            currentListFilter, 
-            found ? found.target_country : '', 
-            found ? found.target_city : '', 
+            currentListFilter,
+            found ? found.target_country : '',
+            found ? found.target_city : '',
             found ? found.target_niche : ''
         );
     } else {
@@ -1554,7 +1914,7 @@ function getSmtpConfig() {
     try {
         const raw = localStorage.getItem(SMTP_STORAGE_KEY);
         if (raw) return JSON.parse(raw);
-    } catch (e) {}
+    } catch (e) { }
     return {
         senderName: '',
         user: '',
@@ -1583,7 +1943,7 @@ async function updateEmailStatusBadge() {
             badgeText.textContent = data.channels.email.emailAddress || 'Email Connected';
             return;
         }
-    } catch (e) {}
+    } catch (e) { }
 
     const config = getSmtpConfig();
     if (config.user && config.pass) {
@@ -1744,13 +2104,13 @@ function initEmailSettings() {
     }
 }
 
-window.openEmailSettingsModal = function() {
+window.openEmailSettingsModal = function () {
     // Unify directly with Channels Modal Email tab
     window.openChannelsModal();
     if (window.switchChannelSettingsTab) window.switchChannelSettingsTab('email');
 };
 
-window.closeEmailSettingsModal = function() {
+window.closeEmailSettingsModal = function () {
     const modal = document.getElementById('emailSettingsModalOverlay');
     if (modal) modal.style.display = 'none';
 };
@@ -1758,7 +2118,7 @@ window.closeEmailSettingsModal = function() {
 // Current Active Lead for Composer
 let activeComposerLead = null;
 
-window.openEmailComposerModal = async function(leadId, prefilledSubject = null, prefilledBody = null) {
+window.openEmailComposerModal = async function (leadId, prefilledSubject = null, prefilledBody = null) {
     const lead = allLeads.find(l => l.id == leadId);
     if (!lead) {
         showToast('Lead details not found.');
@@ -1776,7 +2136,7 @@ window.openEmailComposerModal = async function(leadId, prefilledSubject = null, 
             emailConfigured = true;
             senderEmail = chanData.channels.email.emailAddress || '';
         }
-    } catch (e) {}
+    } catch (e) { }
 
     if (!emailConfigured) {
         const config = getSmtpConfig();
@@ -1844,7 +2204,7 @@ window.openEmailComposerModal = async function(leadId, prefilledSubject = null, 
     document.getElementById('emailComposerModalOverlay').style.display = 'flex';
 };
 
-window.closeEmailComposerModal = function() {
+window.closeEmailComposerModal = function () {
     document.getElementById('emailComposerModalOverlay').style.display = 'none';
     activeComposerLead = null;
 };
@@ -1923,7 +2283,7 @@ async function sendColdEmailSubmit() {
 let activePitchLead = null;
 let currentPitchChannel = 'email';
 
-window.openPitchModal = async function(leadId) {
+window.openPitchModal = async function (leadId) {
     const lead = allLeads.find(l => l.id == leadId);
     if (!lead) {
         showToast('Lead details not found.');
@@ -1979,7 +2339,7 @@ window.openPitchModal = async function(leadId) {
     populatePitchModalFields();
 };
 
-window.switchPitchChannel = function(channel) {
+window.switchPitchChannel = function (channel) {
     currentPitchChannel = channel;
     document.querySelectorAll('.channel-tab-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.channel === channel);
@@ -2010,13 +2370,13 @@ function populatePitchModalFields() {
     }
 }
 
-window.closePitchModal = function() {
+window.closePitchModal = function () {
     const modal = document.getElementById('aiPitchModalOverlay');
     if (modal) modal.style.display = 'none';
     activePitchLead = null;
 };
 
-window.copyModalPitchText = function(btn) {
+window.copyModalPitchText = function (btn) {
     const bodyInput = document.getElementById('pitchModalBody');
     if (!bodyInput) return;
     const text = bodyInput.value.trim();
@@ -2030,7 +2390,7 @@ window.copyModalPitchText = function(btn) {
     });
 };
 
-window.regenerateCurrentModalPitch = async function() {
+window.regenerateCurrentModalPitch = async function () {
     if (!activePitchLead) return;
     const leadId = activePitchLead.id;
     const regenBtn = document.getElementById('modalRegenPitchBtn');
@@ -2062,7 +2422,7 @@ window.regenerateCurrentModalPitch = async function() {
     }
 };
 
-window.transferPitchToEmailComposer = function() {
+window.transferPitchToEmailComposer = function () {
     if (!activePitchLead) return;
     const leadId = activePitchLead.id;
     const subject = document.getElementById('pitchModalSubject').value;
@@ -2072,7 +2432,7 @@ window.transferPitchToEmailComposer = function() {
     openEmailComposerModal(leadId, subject, body);
 };
 
-window.triggerRowDeepEnrich = async function(leadId, btn) {
+window.triggerRowDeepEnrich = async function (leadId, btn) {
     const origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = `<span>⏳ Enriching...</span>`;
@@ -2103,7 +2463,7 @@ window.triggerRowDeepEnrich = async function(leadId, btn) {
 };
 
 // Legacy drawer trigger alias
-window.triggerGeneratePitch = async function(leadId) {
+window.triggerGeneratePitch = async function (leadId) {
     await openPitchModal(leadId);
 };
 
@@ -2116,7 +2476,7 @@ let currentInboxChannelFilter = 'all';
 let activeConversationLeadId = null;
 
 // Fetch global unread stats for badges
-window.fetchInboxStats = async function() {
+window.fetchInboxStats = async function () {
     try {
         const res = await fetch('/api/inbox/stats');
         const data = await res.json();
@@ -2143,7 +2503,7 @@ window.fetchInboxStats = async function() {
 let lastThreadsHash = '';
 let lastThreadsCount = 0;
 
-window.loadInboxConversations = async function(silent = false) {
+window.loadInboxConversations = async function (silent = false) {
     const listEl = document.getElementById('inboxThreadsList');
     if (!listEl) return;
 
@@ -2158,7 +2518,7 @@ window.loadInboxConversations = async function(silent = false) {
 
         if (data.success) {
             allInboxConversations = data.conversations || [];
-            
+
             // Check if thread data changed (ID, timestamp, unread, preview, total count)
             const currentHash = allInboxConversations.map(c => `${c.id}:${c.last_message_at}:${c.unread_count}:${c.last_message_preview}`).join('|');
             if (silent && currentHash === lastThreadsHash && allInboxConversations.length === lastThreadsCount) {
@@ -2278,7 +2638,7 @@ function renderInboxThreads(preserveScroll = false) {
 }
 
 // Open and select conversation thread
-window.openConversation = async function(id, silent = false) {
+window.openConversation = async function (id, silent = false) {
     activeConversationId = id;
 
     // Toggle active thread styling
@@ -2289,7 +2649,7 @@ window.openConversation = async function(id, silent = false) {
         document.body.classList.add('mobile-inbox-open');
         try {
             history.pushState({ inMobileChat: true, conversationId: id }, '');
-        } catch (e) {}
+        } catch (e) { }
     }
 
     const emptyView = document.getElementById('inboxEmptyView');
@@ -2380,7 +2740,7 @@ window.openConversation = async function(id, silent = false) {
         renderChatMessages(messages, conv, !silent);
 
         // Mark read on server
-        fetch(`/api/inbox/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+        fetch(`/api/inbox/conversations/${id}/read`, { method: 'POST' }).catch(() => { });
 
         // Refresh stats badge
         fetchInboxStats();
@@ -2405,7 +2765,7 @@ window.openConversation = async function(id, silent = false) {
 let activeChatAttachment = null;
 
 // Lightbox modal controls
-window.openChatImageLightbox = function(url) {
+window.openChatImageLightbox = function (url) {
     const overlay = document.getElementById('imageLightbox');
     const img = document.getElementById('lightboxImg');
     const downloadBtn = document.getElementById('lightboxDownloadBtn');
@@ -2419,18 +2779,18 @@ window.openChatImageLightbox = function(url) {
     overlay.style.display = 'flex';
 };
 
-window.closeChatImageLightbox = function(e) {
+window.closeChatImageLightbox = function (e) {
     const overlay = document.getElementById('imageLightbox');
     if (overlay) overlay.style.display = 'none';
 };
 
 // File Attachment Handler (Photos & Documents)
-window.handleChatFileUpload = function(input) {
+window.handleChatFileUpload = function (input) {
     if (!input || !input.files || !input.files[0]) return;
     const file = input.files[0];
     const reader = new FileReader();
 
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         const base64 = e.target.result;
         activeChatAttachment = {
             filename: file.name,
@@ -2456,7 +2816,7 @@ window.handleChatFileUpload = function(input) {
     reader.readAsDataURL(file);
 };
 
-window.removeChatAttachment = function() {
+window.removeChatAttachment = function () {
     activeChatAttachment = null;
     const previewContainer = document.getElementById('chatAttachPreview');
     const input = document.getElementById('chatFileInput');
@@ -2465,10 +2825,10 @@ window.removeChatAttachment = function() {
 };
 
 // Rich Message Formatter: Converts URLs, Markdown links, Images, and Photos into interactive elements
-window.formatChatMessageBody = function(raw) {
+window.formatChatMessageBody = function (raw) {
     if (!raw) return '';
     let text = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    
+
     // 1. Markdown images: ![alt](url)
     text = text.replace(/!\[([^\]]*)\]\(((?:https?:\/\/|\/uploads\/)[^\s\)]+)\)/gi, (m, alt, url) => {
         return `<div class="chat-media-card"><img src="${url}" alt="${alt || 'Photo'}" class="chat-bubble-img" onclick="openChatImageLightbox('${url}')" loading="lazy" /><span class="chat-img-zoom-hint">🔍 Click to zoom</span></div>`;
@@ -2565,13 +2925,13 @@ function renderChatMessages(messages, conv, forceScrollBottom = false) {
             html += `<div class="chat-date-separator"><span>${dateLabel}</span></div>`;
         }
 
-        const subjectHtml = (m.subject && conv.channel === 'email') 
-            ? `<div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(0,0,0,0.06); opacity: 0.9;">Subject: ${escapeHtml(m.subject)}</div>` 
+        const subjectHtml = (m.subject && conv.channel === 'email')
+            ? `<div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(0,0,0,0.06); opacity: 0.9;">Subject: ${escapeHtml(m.subject)}</div>`
             : '';
         const rawBody = m.body || m.message_body || m.subject || '';
         const textHtml = formatChatMessageBody(rawBody);
-        const checkmarks = isOutbound 
-            ? '<span class="chat-checkmarks" title="Read / Delivered">✓✓</span>' 
+        const checkmarks = isOutbound
+            ? '<span class="chat-checkmarks" title="Read / Delivered">✓✓</span>'
             : '';
 
         html += `
@@ -2604,7 +2964,7 @@ function renderChatMessages(messages, conv, forceScrollBottom = false) {
 }
 
 // Delete Active Conversation
-window.deleteActiveConversation = async function() {
+window.deleteActiveConversation = async function () {
     if (!activeConversationId) return;
     if (!confirm('Are you sure you want to delete this entire conversation and all its messages?')) return;
 
@@ -2616,7 +2976,7 @@ window.deleteActiveConversation = async function() {
             showToast('✓ Conversation deleted');
             activeConversationId = null;
             allInboxConversations = allInboxConversations.filter(c => c.id != idToDelete);
-            
+
             const emptyView = document.getElementById('inboxEmptyView');
             const activeView = document.getElementById('inboxActiveChat');
             if (emptyView) emptyView.style.display = 'flex';
@@ -2633,7 +2993,7 @@ window.deleteActiveConversation = async function() {
 };
 
 // Delete Conversation by ID from thread list item
-window.deleteConversationById = async function(id, e) {
+window.deleteConversationById = async function (id, e) {
     if (e) e.stopPropagation();
     if (!confirm('Delete this conversation?')) return;
 
@@ -2661,7 +3021,7 @@ window.deleteConversationById = async function(id, e) {
 };
 
 // Mobile back button action to return to list (WhatsApp Mobile style)
-window.closeMobileChat = function() {
+window.closeMobileChat = function () {
     document.body.classList.remove('mobile-inbox-open');
     if (window.innerWidth <= 768) {
         activeConversationId = null;
@@ -2681,7 +3041,7 @@ window.addEventListener('popstate', (e) => {
 });
 
 // Filter by channel tabs
-window.filterInboxChannel = function(channel, btn) {
+window.filterInboxChannel = function (channel, btn) {
     currentInboxChannelFilter = channel;
 
     document.querySelectorAll('.inbox-tab-btn').forEach(b => {
@@ -2698,7 +3058,7 @@ window.filterInboxChannel = function(channel, btn) {
 };
 
 // Send reply in active conversation with strict single-execution mutex lock
-window.sendActiveChatReply = async function() {
+window.sendActiveChatReply = async function () {
     if (window.isSendingChatReply) {
         console.warn('[Inbox] Send already in progress, ignoring duplicate trigger.');
         return;
@@ -2800,17 +3160,17 @@ window.sendActiveChatReply = async function() {
 };
 
 // Auto-expanding chat textarea (WhatsApp Web behavior)
-window.autoResizeChatInput = function(el) {
+window.autoResizeChatInput = function (el) {
     const input = el || document.getElementById('chatReplyInput');
     if (!input) return;
-    
+
     // Temporarily reset height to auto to compute natural scrollHeight
     input.style.height = 'auto';
-    
+
     const minHeight = 40;
     const maxHeight = 140; // Expands up to ~6 lines before internal scrolling
     const scrollH = input.scrollHeight;
-    
+
     if (scrollH <= minHeight) {
         input.style.height = minHeight + 'px';
         input.style.overflowY = 'hidden';
@@ -2869,7 +3229,7 @@ window.inboxPollTimer = setInterval(async () => {
                         renderChatMessages(msgs, conv, hasNewInbound);
                     }
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
         fetchInboxStats();
     }
@@ -2882,7 +3242,7 @@ window.globalStatsTimer = setInterval(() => {
 }, 10000);
 
 // AI Suggest contextual reply
-window.suggestAIReplyForCurrentChat = async function() {
+window.suggestAIReplyForCurrentChat = async function () {
     if (!activeConversationId) {
         showToast('Please select an active chat first.');
         return;
@@ -2920,7 +3280,7 @@ window.suggestAIReplyForCurrentChat = async function() {
 };
 
 // Trigger manual IMAP email inbound sync
-window.triggerEmailSync = async function(btn) {
+window.triggerEmailSync = async function (btn) {
     const origHtml = btn ? btn.innerHTML : null;
     if (btn) {
         btn.disabled = true;
@@ -2958,7 +3318,7 @@ window.triggerEmailSync = async function(btn) {
 };
 
 // Save and Test Email IMAP Configuration from Channels Modal
-window.saveAndSyncEmailChannel = async function() {
+window.saveAndSyncEmailChannel = async function () {
     const hostEl = document.getElementById('imapHost');
     const portEl = document.getElementById('imapPort');
     const emailEl = document.getElementById('imapEmail');
@@ -3067,7 +3427,7 @@ window.saveAndSyncEmailChannel = async function() {
 };
 
 // Open lead profile drawer from current chat
-window.openLeadProfileFromCurrentChat = function() {
+window.openLeadProfileFromCurrentChat = function () {
     if (activeConversationLeadId) {
         window.openLeadDetail(activeConversationLeadId);
     } else {
@@ -3078,7 +3438,7 @@ window.openLeadProfileFromCurrentChat = function() {
 // ==========================================================
 // CHANNELS MODAL (CONNECT EMAIL / WHATSAPP / INSTAGRAM)
 // ==========================================================
-window.openChannelsModal = async function() {
+window.openChannelsModal = async function () {
     const modal = document.getElementById('channelsModalOverlay');
     if (!modal) return;
     modal.style.display = 'flex';
@@ -3117,7 +3477,7 @@ window.openChannelsModal = async function() {
     }
 };
 
-window.closeChannelsModal = function() {
+window.closeChannelsModal = function () {
     const modal = document.getElementById('channelsModalOverlay');
     if (modal) modal.style.display = 'none';
     if (window.waStatusPollTimer) {
@@ -3127,7 +3487,7 @@ window.closeChannelsModal = function() {
 };
 
 // Robust Tab Switcher for Channels Modal
-window.switchChannelSettingsTab = window.switchChannelTab = function(tabName, btn) {
+window.switchChannelSettingsTab = window.switchChannelTab = function (tabName, btn) {
     const norm = (tabName || '').toLowerCase();
     const isEmail = norm.includes('email');
     const isWa = norm.includes('wa') || norm.includes('whats');
@@ -3145,10 +3505,10 @@ window.switchChannelSettingsTab = window.switchChannelTab = function(tabName, bt
     // 2. Toggle Active Tab Buttons
     document.querySelectorAll('.channel-tab-btn, .channel-nav-tab').forEach(b => b.classList.remove('active'));
 
-    const targetBtn = btn || 
-        (isEmail ? document.getElementById('tabChanEmail') : 
-         isWa ? document.getElementById('tabChanWa') : 
-         isIg ? document.getElementById('tabChanIg') : null);
+    const targetBtn = btn ||
+        (isEmail ? document.getElementById('tabChanEmail') :
+            isWa ? document.getElementById('tabChanWa') :
+                isIg ? document.getElementById('tabChanIg') : null);
 
     if (targetBtn) targetBtn.classList.add('active');
 
@@ -3167,7 +3527,7 @@ window.switchChannelSettingsTab = window.switchChannelTab = function(tabName, bt
 // WHATSAPP LIVE BAILEYS QR CODE ENGINE
 // ==========================================================
 
-window.checkWhatsAppStatus = async function() {
+window.checkWhatsAppStatus = async function () {
     try {
         const res = await fetch('/api/whatsapp/status');
         const data = await res.json();
@@ -3242,7 +3602,7 @@ function updateWhatsAppUI(data) {
     }
 }
 
-window.requestWhatsAppQr = async function() {
+window.requestWhatsAppQr = async function () {
     const btn = document.getElementById('btnStartWaQr');
     const qrPlaceholder = document.getElementById('waQrPlaceholder');
     const qrActive = document.getElementById('waQrActive');
@@ -3283,7 +3643,7 @@ window.requestWhatsAppQr = async function() {
                     loadInboxConversations();
                     fetchInboxStats();
                 }
-            } catch (e) {}
+            } catch (e) { }
         }, 2500);
     } catch (err) {
         showToast('Error requesting WhatsApp QR: ' + err.message);
@@ -3294,7 +3654,7 @@ window.requestWhatsAppQr = async function() {
     }
 };
 
-window.disconnectWhatsAppSession = async function() {
+window.disconnectWhatsAppSession = async function () {
     if (!confirm('Are you sure you want to unlink and disconnect your WhatsApp?')) return;
 
     if (window.waStatusPollTimer) {
@@ -3320,7 +3680,7 @@ window.disconnectWhatsAppSession = async function() {
 // MANYCHAT INSTAGRAM BRIDGE
 // ==========================================================
 
-window.simulateManyChatInboundMessage = async function() {
+window.simulateManyChatInboundMessage = async function () {
     const btn = document.getElementById('sendManyChatTestMsgBtn');
     if (btn) btn.disabled = true;
 
@@ -3356,7 +3716,7 @@ window.simulateManyChatInboundMessage = async function() {
     }
 };
 
-window.copyInputVal = function(elemId) {
+window.copyInputVal = function (elemId) {
     const el = document.getElementById(elemId);
     if (!el) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {

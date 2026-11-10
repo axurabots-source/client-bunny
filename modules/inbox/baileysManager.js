@@ -19,8 +19,8 @@ class BaileysManager {
         this.reconnectAttempts = 0;
         this.reconnectTimeout = null;
 
-        // Auto-initialize if session credentials already exist on disk
-        if (fs.existsSync(path.join(this.authFolder, 'creds.json'))) {
+        // Auto-initialize if session credentials already exist on disk (skip in Vercel serverless)
+        if (!process.env.VERCEL && fs.existsSync(path.join(this.authFolder, 'creds.json'))) {
             setTimeout(() => {
                 this.init().catch(err => console.warn('[WhatsApp Baileys] Auto-init notice:', err.message));
             }, 1000);
