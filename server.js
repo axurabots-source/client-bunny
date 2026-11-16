@@ -18,6 +18,18 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api', inboxRouter);
 
+// 0. Health & Worker Status Check
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        uptime: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString(),
+        service: 'client-bunny',
+        is_serverless: Boolean(process.env.VERCEL),
+        scraper_ready: !process.env.VERCEL
+    });
+});
+
 // 1. Get Summary Stats
 app.get('/api/stats', async (req, res) => {
     try {
@@ -522,6 +534,15 @@ app.get('/api/hunt/stream', async (req, res) => {
     let cappedLimit = parseInt(limit, 10) || 35;
     if (cappedLimit > 45) cappedLimit = 45;
     if (cappedLimit < 15) cappedLimit = 15;
+
+    // Vercel Serverless Chromium check
+    if (process.env.VERCEL) {
+        sendEvent({
+            type: 'error',
+            message: 'Playwright Google Maps scraping cannot run inside Vercel Serverless Lambdas. Please route your hunt to the Render Scraper Worker or run locally.'
+        });
+        return res.end();
+    }
 
     const fullQuery = `${niche} in ${area ? area + ', ' : ''}${city}, ${country}`;
     sendEvent({ type: 'start', query: fullQuery, limit: cappedLimit, listName });

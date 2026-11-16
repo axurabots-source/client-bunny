@@ -170,15 +170,24 @@
     {
       "milestone": "Module 22: Vercel Serverless Hardening & Deployment Recovery",
       "description": "Diagnosed and resolved 500 FUNCTION_INVOCATION_FAILED on Vercel: added missing pino dependency to package.json, converted Playwright require statements to lazy-loaded fallbacks across liveHunter/crawler/dorkResolver, added VERCEL environment guards to disable background IMAP auto-poller interval and WhatsApp Baileys socket auto-initialization in serverless Lambdas, added includeFiles: [public/**, modules/**] to vercel.json, and pushed all tracking modules to GitHub main. Verified live at https://client-bunny.vercel.app returning 200 OK across UI and API endpoints."
+    },
+    {
+      "milestone": "Module 23: Sub-Niche Live Extraction Engine, Relevance Filter & Render Cloud Worker Architecture",
+      "description": "Engineered dedicated Sub-Niche extraction system (modules/m2_gmb_integration/subNicheEngine.js) resolving query location stutter (e.g., 'cardiac surgeons in Manchester England' -> clean 'Cardiac Surgeons in Manchester, United Kingdom'). Built multi-anchor semantic expansion with synonym variants, and 0-100% semantic relevance scoring to filter out irrelevant ads and non-target listings. Converted hunt execution to Stream-First architecture (saving and emitting leads immediately via SSE while running deep detective auto-enrichment asynchronously in background). Created Render Dockerfile, render.yaml, and decoupled Vercel-to-Render worker dual-engine support with live UI configuration badge and /api/health monitoring. Verified live extraction with 15/15 target cardiac surgeon leads saved and streamed."
     }
   ],
-  "current_checkpoint": "Client Bunny is 100% live and operational on both local development (http://localhost:3000) and Vercel Production (https://client-bunny.vercel.app). Database connected, leads streaming, tracking dashboard active. Ready for Phase 2 implementation.",
+  "current_checkpoint": "Sub-Niche extraction engine and Render cloud worker architecture complete and 100% verified. Localhost PC engine and Render Cloud Worker dual-support active with real-time SSE streaming and background auto-enrichment.",
   "next_immediate_steps": [
-    "Proceed with Phase 2 requirements definition and implementation."
+    "Commit and push sub-niche engine and Render Docker config to git main.",
+    "Deploy client-bunny-worker on Render using render.yaml / Dockerfile and test end-to-end cloud scraping from https://client-bunny.vercel.app."
   ],
   "key_files": {
     "server": "server.js",
     "tracker": "modules/tracking/tracker.js",
+    "subniche_engine": "modules/m2_gmb_integration/subNicheEngine.js",
+    "live_hunter": "modules/m2_gmb_integration/liveHunter.js",
+    "dockerfile": "Dockerfile",
+    "render_config": "render.yaml",
     "mailer": "modules/m5_email_dispatcher/mailer.js",
     "ai_engine": "modules/m6_ai_engine/aiIntelligence.js",
     "lead_repo": "modules/m1_storage/leadRepository.js",

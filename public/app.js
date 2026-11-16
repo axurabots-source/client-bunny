@@ -105,6 +105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initSidebarToggle();
     initNicheChips();
     initEmailSettings();
+    initWorkerSettings();
     bindEvents();
     initPWA();
 
@@ -119,6 +120,82 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchInboxStats()
     ]);
 });
+
+// ==========================================================
+// 1.0. SCRAPER WORKER CONFIGURATION & DUAL-ENGINE SUPPORT
+// ==========================================================
+function getScraperWorkerUrl() {
+    const saved = localStorage.getItem('cb_scraper_worker_url');
+    if (saved && saved.trim()) {
+        return saved.trim().replace(/\/+$/, '');
+    }
+    if (window.location.hostname.includes('vercel.app')) {
+        return 'https://client-bunny-worker.onrender.com';
+    }
+    return '';
+}
+
+function updateWorkerStatusBadge() {
+    const engineDot = document.getElementById('engineStatusDot');
+    const engineLabel = document.getElementById('engineStatusLabel');
+    const workerInput = document.getElementById('customWorkerUrlInput');
+    const currentWorker = getScraperWorkerUrl();
+
+    if (workerInput && !workerInput.value) {
+        workerInput.value = localStorage.getItem('cb_scraper_worker_url') || (window.location.hostname.includes('vercel.app') ? 'https://client-bunny-worker.onrender.com' : '');
+    }
+
+    if (!engineDot || !engineLabel) return;
+
+    if (currentWorker) {
+        engineDot.style.background = '#3B82F6';
+        const displayHost = currentWorker.replace(/^https?:\/\//, '').split('/')[0];
+        engineLabel.textContent = `Scraper Engine: Cloud Worker (${displayHost})`;
+    } else {
+        engineDot.style.background = '#10B981';
+        engineLabel.textContent = 'Scraper Engine: Localhost PC (Direct Playwright)';
+    }
+}
+
+function initWorkerSettings() {
+    updateWorkerStatusBadge();
+
+    const toggleBtn = document.getElementById('toggleWorkerSettingsBtn');
+    const box = document.getElementById('workerSettingsBox');
+    const saveBtn = document.getElementById('saveWorkerUrlBtn');
+    const input = document.getElementById('customWorkerUrlInput');
+
+    if (toggleBtn && box) {
+        toggleBtn.addEventListener('click', () => {
+            box.style.display = box.style.display === 'none' ? 'block' : 'none';
+        });
+    }
+
+    if (saveBtn && input) {
+        saveBtn.addEventListener('click', async () => {
+            const val = input.value.trim().replace(/\/+$/, '');
+            if (val) {
+                localStorage.setItem('cb_scraper_worker_url', val);
+                showToast(`Saved Worker URL: ${val}. Testing connectivity...`);
+                try {
+                    const res = await fetch(`${val}/api/health`, { method: 'GET' });
+                    if (res.ok) {
+                        showToast(`Connected to Cloud Worker successfully!`);
+                    } else {
+                        showToast(`Worker responded with status ${res.status}.`);
+                    }
+                } catch (netErr) {
+                    showToast(`Saved, but worker check returned: ${netErr.message}`);
+                }
+            } else {
+                localStorage.removeItem('cb_scraper_worker_url');
+                showToast('Reset to default scraper engine.');
+            }
+            updateWorkerStatusBadge();
+            if (box) box.style.display = 'none';
+        });
+    }
+}
 
 // ==========================================================
 // 1.1. PROGRESSIVE WEB APP (PWA) INITIALIZATION
@@ -791,8 +868,9 @@ function bindEvents() {
             } catch (err) { }
         }
 
-        if (!targetListName) {
-            targetListName = 'General Ingestion';
+        if (!targetListName || targetListName === 'General Ingestion') {
+            const cleanNichePart = niche.replace(/\s+(in|near|at)\s+.*$/i, '').trim();
+            targetListName = `${cleanNichePart} - ${city}`;
         }
 
         const country = huntCountry.value;
@@ -845,7 +923,8 @@ function bindEvents() {
         });
 
         let streamedCount = 0;
-        const sseUrl = `/api/hunt/stream?${params.toString()}`;
+        const workerBase = getScraperWorkerUrl();
+        const sseUrl = `${workerBase}/api/hunt/stream?${params.toString()}`;
         const eventSource = new EventSource(sseUrl);
 
         function restoreHuntBtn() {
@@ -928,6 +1007,9 @@ function bindEvents() {
             console.error('SSE connection interrupted:', err);
             eventSource.close();
             restoreHuntBtn();
+            if (window.location.hostname.includes('vercel.app') && !localStorage.getItem('cb_scraper_worker_url')) {
+                showToast('Notice: Live scraping on Vercel requires your Render worker container. Configure your Worker URL in Hunt Launchpad.');
+            }
             fetchLeads();
             fetchStats();
         };

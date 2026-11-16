@@ -336,6 +336,27 @@
                             <h3 class="panel-title" style="font-size: 18px; font-weight: 600;">Hunt Configuration</h3>
                         </div>
 
+                        <!-- Scraper Engine Indicator & Cloud Worker Setup -->
+                        <div class="engine-badge-row" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding: 10px 14px; background: #F4F4F5; border-radius: 8px; border: 1px solid #E4E4E7; font-size: 13px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="engine-status-dot" id="engineStatusDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10B981;"></span>
+                                <span style="font-weight: 500; color: #09090B;" id="engineStatusLabel">Scraper Engine: Localhost PC (Ready)</span>
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" id="toggleWorkerSettingsBtn" style="padding: 4px 10px; font-size: 12px; height: 28px;">
+                                Configure Worker
+                            </button>
+                        </div>
+                        <div id="workerSettingsBox" style="display: none; margin-bottom: 20px; padding: 14px; background: #FAFAFA; border: 1px solid #E4E4E7; border-radius: 8px;">
+                            <label class="field-label-clean" style="margin-bottom: 6px;">RENDER CLOUD SCRAPER WORKER URL</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="text" id="customWorkerUrlInput" class="form-input" placeholder="https://client-bunny-worker.onrender.com" style="flex: 1; font-size: 13px;">
+                                <button type="button" class="btn btn-primary btn-sm" id="saveWorkerUrlBtn" style="height: 38px;">Save</button>
+                            </div>
+                            <div style="font-size: 11px; color: #71717A; margin-top: 6px;">
+                                Leave blank on localhost to use local Playwright engine. On Vercel, connect your Render Web Service.
+                            </div>
+                        </div>
+
                         <form id="huntForm" class="hunt-form-minimal">
 
                             <!-- Target List -->
