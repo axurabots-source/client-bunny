@@ -24,6 +24,28 @@ try {
 }
 const { InboxRepository } = require('./inboxRepository');
 
+function safeClearFolder(folderPath) {
+    if (!fs.existsSync(folderPath)) return;
+    try {
+        const files = fs.readdirSync(folderPath);
+        for (const file of files) {
+            const curPath = path.join(folderPath, file);
+            try {
+                if (fs.lstatSync(curPath).isDirectory()) {
+                    safeClearFolder(curPath);
+                    fs.rmdirSync(curPath);
+                } else {
+                    fs.unlinkSync(curPath);
+                }
+            } catch (e) {
+                try { fs.writeFileSync(curPath, ''); } catch (_) {}
+            }
+        }
+    } catch (err) {
+        console.warn('[WhatsApp Baileys] Safe wipe note:', err.message);
+    }
+}
+
 class BaileysManager {
     constructor() {
         this.sock = null;
@@ -34,6 +56,8 @@ class BaileysManager {
         this.isReconnecting = false;
         this.reconnectAttempts = 0;
         this.reconnectTimeout = null;
+        this.contacts = {};
+        this._pendingQrResolver = null;
 
         // Auto-initialize if session credentials already exist on disk (skip in Vercel serverless)
         if (!process.env.VERCEL && fs.existsSync(path.join(this.authFolder, 'creds.json'))) {
@@ -55,10 +79,8 @@ class BaileysManager {
      * Explicitly generate a fresh QR code for linking a WhatsApp device.
      * Wipes any stale or replaced credentials so Baileys is forced to enter pairing mode.
      */
-    async generateQr() {
-        if (this.sock && this.status === 'connected') {
-            return this.getStatus();
-        }
+    async generateQr(force = true) {
+        console.log(`[WhatsApp Baileys] generateQr requested (force: ${force}, current status: ${this.status})`);
 
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);
@@ -66,26 +88,58 @@ class BaileysManager {
         }
         this.reconnectAttempts = 0;
 
+        // If force is false and we are already connected, return current status
+        if (!force && this.sock && this.status === 'connected') {
+            return this.getStatus();
+        }
+
+        // Forcibly tear down any existing socket and listeners
         if (this.sock) {
             try {
                 this.sock.ev.removeAllListeners();
+                await this.sock.logout().catch(() => {});
                 this.sock.end(undefined);
             } catch (e) {}
             this.sock = null;
         }
 
         // Wipe stale credentials so Baileys produces a brand new pairing QR
-        if (fs.existsSync(this.authFolder)) {
-            try {
-                fs.rmSync(this.authFolder, { recursive: true, force: true });
-            } catch (e) {
-                console.warn('[WhatsApp Baileys] Could not wipe auth folder:', e.message);
-            }
-        }
+        safeClearFolder(this.authFolder);
 
         this.status = 'connecting';
         this.currentQr = null;
-        return await this.init(true);
+        this.connectedUser = null;
+
+        // Set up a promise that resolves immediately when the QR code is generated
+        return new Promise(async (resolve) => {
+            let hasResolved = false;
+
+            const timer = setTimeout(() => {
+                if (!hasResolved) {
+                    hasResolved = true;
+                    this._pendingQrResolver = null;
+                    resolve(this.getStatus());
+                }
+            }, 12000);
+
+            this._pendingQrResolver = (status) => {
+                if (!hasResolved) {
+                    hasResolved = true;
+                    clearTimeout(timer);
+                    resolve(status);
+                }
+            };
+
+            try {
+                await this.init(true);
+            } catch (err) {
+                if (!hasResolved) {
+                    hasResolved = true;
+                    clearTimeout(timer);
+                    resolve({ success: false, status: 'error', error: err.message });
+                }
+            }
+        });
     }
 
     async init(forceNew = false) {
@@ -134,7 +188,7 @@ class BaileysManager {
                 generateHighQualityLinkPreview: true
             });
 
-            // Set up a promise to wait for initial QR code or connection before returning to caller
+            // Initial wait promise with fallback resolver
             const initialWaitPromise = new Promise((resolve) => {
                 let resolved = false;
                 const timer = setTimeout(() => {
@@ -142,7 +196,7 @@ class BaileysManager {
                         resolved = true;
                         resolve(this.getStatus());
                     }
-                }, 6000);
+                }, 8000);
 
                 const checkReady = () => {
                     if (!resolved && (this.status === 'qr_ready' || this.status === 'connected')) {
@@ -154,7 +208,7 @@ class BaileysManager {
 
                 this.sock.ev.on('connection.update', (u) => {
                     if (u.qr || u.connection === 'open') {
-                        setTimeout(checkReady, 250);
+                        setTimeout(checkReady, 300);
                     }
                 });
             });
@@ -183,6 +237,10 @@ class BaileysManager {
                         });
                         this.status = 'qr_ready';
                         console.log('[WhatsApp Baileys] Live QR Code generated and ready for scan.');
+                        if (this._pendingQrResolver) {
+                            this._pendingQrResolver(this.getStatus());
+                            this._pendingQrResolver = null;
+                        }
                     } catch (err) {
                         console.error('[WhatsApp Baileys] Failed to convert QR code to DataURL:', err.message);
                     }
@@ -199,6 +257,10 @@ class BaileysManager {
                     const jid = this.sock?.user ? (this.sock.user.id || '') : '';
                     this.connectedUser = jid.split(':')[0] || 'Active';
                     console.log(`[WhatsApp Baileys] ✅ Connected as +${this.connectedUser}!`);
+                    if (this._pendingQrResolver) {
+                        this._pendingQrResolver(this.getStatus());
+                        this._pendingQrResolver = null;
+                    }
                 }
 
                 if (connection === 'close') {

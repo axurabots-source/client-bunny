@@ -3561,7 +3561,8 @@ window.switchChannelSettingsTab = window.switchChannelTab = function (tabName, b
 
 window.checkWhatsAppStatus = async function () {
     try {
-        const res = await fetch('/api/whatsapp/status');
+        const backendUrl = getScraperWorkerUrl();
+        const res = await fetch(`${backendUrl}/api/whatsapp/status`);
         const data = await res.json();
         updateWhatsAppUI(data);
     } catch (err) {
@@ -3582,7 +3583,7 @@ function updateWhatsAppUI(data) {
     const qrImage = document.getElementById('waQrImage');
     const qrSpinner = document.getElementById('waQrSpinner');
 
-    if (data.status === 'connected') {
+    if (data.status === 'connected' && !data.qr) {
         if (statusDot) statusDot.style.backgroundColor = '#10B981';
         if (statusText) statusText.innerHTML = `Status: <span style="color: #15803D;">Connected (+${data.connectedUser || 'Active'})</span>`;
         if (disconnectBtn) disconnectBtn.style.display = 'inline-flex';
@@ -3634,17 +3635,19 @@ function updateWhatsAppUI(data) {
     }
 }
 
-window.requestWhatsAppQr = async function () {
+window.requestWhatsAppQr = async function (force = true) {
     const btn = document.getElementById('btnStartWaQr');
     const qrPlaceholder = document.getElementById('waQrPlaceholder');
     const qrActive = document.getElementById('waQrActive');
     const qrSpinner = document.getElementById('waQrSpinner');
     const qrImage = document.getElementById('waQrImage');
+    const connectedNotice = document.getElementById('waConnectedNotice');
 
     if (btn) btn.disabled = true;
 
     // Show connecting / generating state immediately
     if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+    if (connectedNotice) connectedNotice.style.display = 'none';
     if (qrActive) qrActive.style.display = 'block';
     if (qrSpinner) {
         qrSpinner.style.display = 'block';
@@ -3653,7 +3656,8 @@ window.requestWhatsAppQr = async function () {
     if (qrImage) qrImage.style.display = 'none';
 
     try {
-        const res = await fetch('/api/whatsapp/qr?force=true', { method: 'POST' });
+        const backendUrl = getScraperWorkerUrl();
+        const res = await fetch(`${backendUrl}/api/whatsapp/qr?force=${force}`, { method: 'POST' });
         const data = await res.json();
         updateWhatsAppUI(data);
 
@@ -3666,7 +3670,7 @@ window.requestWhatsAppQr = async function () {
         // Auto-poll every 2.5 seconds to detect when user scans QR on phone
         window.waStatusPollTimer = setInterval(async () => {
             try {
-                const statusRes = await fetch('/api/whatsapp/status');
+                const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`);
                 const statusData = await statusRes.json();
                 updateWhatsAppUI(statusData);
 
@@ -3695,7 +3699,8 @@ window.disconnectWhatsAppSession = async function () {
     }
 
     try {
-        const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+        const backendUrl = getScraperWorkerUrl();
+        const res = await fetch(`${backendUrl}/api/whatsapp/disconnect`, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
             showToast('✓ WhatsApp unlinked successfully.');

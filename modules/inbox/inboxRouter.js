@@ -339,7 +339,8 @@ router.get('/whatsapp/status', (req, res) => {
 // Trigger / Request QR Code for scanning
 router.post('/whatsapp/qr', async (req, res) => {
     try {
-        const status = await baileysManager.generateQr();
+        const force = req.query.force !== 'false';
+        const status = await baileysManager.generateQr(force);
         res.json({ success: true, ...status });
     } catch (err) {
         console.error('Error generating WhatsApp QR:', err);

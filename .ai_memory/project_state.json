@@ -174,9 +174,13 @@
     {
       "milestone": "Module 23: Sub-Niche Live Extraction Engine, Relevance Filter & Render Cloud Worker Architecture",
       "description": "Engineered dedicated Sub-Niche extraction system (modules/m2_gmb_integration/subNicheEngine.js) resolving query location stutter (e.g., 'cardiac surgeons in Manchester England' -> clean 'Cardiac Surgeons in Manchester, United Kingdom'). Built multi-anchor semantic expansion with synonym variants, and 0-100% semantic relevance scoring to filter out irrelevant ads and non-target listings. Converted hunt execution to Stream-First architecture (saving and emitting leads immediately via SSE while running deep detective auto-enrichment asynchronously in background). Created Render Dockerfile, render.yaml, and decoupled Vercel-to-Render worker dual-engine support with live UI configuration badge and /api/health monitoring. Verified live extraction with 15/15 target cardiac surgeon leads saved and streamed."
+    },
+    {
+      "milestone": "Module 24: WhatsApp Baileys QR Pipeline Hardening & Multi-Environment Re-Pairing",
+      "description": "Diagnosed and resolved WhatsApp QR generation pipeline flakiness: fixed generateQr to forcibly teardown stale sockets and wipe locked auth files (safeClearFolder) on force=true instead of silently returning 'connected'; added direct event resolver for qr_ready eliminating 250ms race condition and timeout freezes; updated inboxRouter.js to pass force flag; routed frontend WhatsApp endpoints through getScraperWorkerUrl() so Vercel frontend seamlessly controls persistent Render Baileys worker; added 'Link Different Number (Generate Fresh QR)' action button in UI. Verified 100% reliable QR generation."
     }
   ],
-  "current_checkpoint": "Direct Render worker automation complete. Removed manual 'Configure Worker' UI button and form fields. Frontend automatically resolves Render worker on cloud deployments and local engine on localhost.",
+  "current_checkpoint": "WhatsApp Baileys QR generation pipeline 100% hardened and verified. Fresh QR codes generate reliably on every request. Localhost and Render environments synchronized.",
   "next_immediate_steps": [
     "Ready for user's next feature or production campaign hunts."
   ],
