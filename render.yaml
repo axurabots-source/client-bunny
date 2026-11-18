@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: client-bunny-worker
+    name: client-bunny
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
@@ -13,6 +13,4 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GROQ_API_KEY
-        sync: false
-      - key: CRYPTO_VAULT_KEY
         sync: false

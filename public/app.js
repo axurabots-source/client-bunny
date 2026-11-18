@@ -130,7 +130,7 @@ function getScraperWorkerUrl() {
         return saved.trim().replace(/\/+$/, '');
     }
     if (window.location.hostname.includes('vercel.app')) {
-        return 'https://client-bunny-worker.onrender.com';
+        return 'https://client-bunny.onrender.com';
     }
     return '';
 }
@@ -142,7 +142,7 @@ function updateWorkerStatusBadge() {
     const currentWorker = getScraperWorkerUrl();
 
     if (workerInput && !workerInput.value) {
-        workerInput.value = localStorage.getItem('cb_scraper_worker_url') || (window.location.hostname.includes('vercel.app') ? 'https://client-bunny-worker.onrender.com' : '');
+        workerInput.value = localStorage.getItem('cb_scraper_worker_url') || (window.location.hostname.includes('vercel.app') ? 'https://client-bunny.onrender.com' : '');
     }
 
     if (!engineDot || !engineLabel) return;
