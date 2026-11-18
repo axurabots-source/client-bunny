@@ -127,6 +127,34 @@ app.post(['/api/leads/:id/pitch', '/api/leads/:id/generate-pitch'], async (req, 
     }
 });
 
+// 3.9. Dedicated On-Demand WhatsApp Pitch Generation (Tailored for WhatsApp Chat)
+app.all(['/api/leads/:id/whatsapp-pitch', '/api/leads/:id/pitch/whatsapp'], async (req, res) => {
+    try {
+        const lead = await LeadRepository.getLeadById(req.params.id);
+        if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
+
+        const { generateMultiChannelPitch } = require('./modules/m6_ai_engine/aiIntelligence');
+        const dms = await LeadRepository.getDecisionMakers(lead.id);
+        const topDecisionMaker = (dms && dms.length > 0) ? dms[0] : { full_name: lead.gmb_owner_name || 'Owner', title_role: 'Founder' };
+
+        const pitchData = await generateMultiChannelPitch(lead, topDecisionMaker);
+        const fallbackPitch = `Hi ${topDecisionMaker.full_name || 'there'} - saw ${lead.title}'s ${lead.review_rating || '5'}★ standing in ${lead.city || 'your area'}. We help local businesses capture lost search traffic and automate appointments. Does tomorrow at 2 PM work for a quick 5-min intro?`;
+        const whatsappPitch = pitchData.whatsapp_quick_msg || fallbackPitch;
+
+        res.json({
+            success: true,
+            pitch: whatsappPitch,
+            multiChannel: pitchData,
+            leadId: lead.id,
+            leadTitle: lead.title,
+            phone: lead.whatsapp_number || lead.phone
+        });
+    } catch (err) {
+        console.error("Error generating WhatsApp pitch:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // 3.10. Send Approved Cold Email (Outreach Dispatcher)
 app.post(['/api/outreach/send', '/api/leads/:id/send-email'], async (req, res) => {
     try {

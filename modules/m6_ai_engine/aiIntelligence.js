@@ -175,7 +175,7 @@ Generate high-converting outreach copy adhering strictly to the 3-step framework
         subject_line: `quick question re: ${businessTitle}`,
         email_body: `${greeting}\n\nI noticed ${businessTitle} holds a strong ${rating}★ reputation in ${city}, but patients searching online currently run into ${painPointDesc}.\n\nWe build streamlined client-acquisition booking setups that turn local searchers into confirmed appointments on autopilot.\n\nDoes Tuesday at 2 PM work for 10 minutes to see how this works?`,
         linkedin_note: `${greeting} Noticed ${businessTitle}'s ${rating}★ standing in ${city}. We help local leaders fix ${painPointDesc.slice(0, 50)} to convert more bookings. Does Thursday at 2 PM work for a 5-min chat?`,
-        whatsapp_quick_msg: `Hi ${ownerName || 'there'} - saw ${businessTitle}'s ${rating}★ reviews in ${city}. We help local businesses capture lost search traffic. Does tomorrow at 2 PM work for a quick 5-min intro?`
+        whatsapp_quick_msg: `Hi ${ownerName || 'there'} - noticed ${businessTitle} has strong ${rating}★ standing in ${city}, but ${painPointDesc}. We help local specialists capture lost client inquiries on autopilot. Does tomorrow at 2 PM work for a quick 5-min intro?`
     };
 }
 

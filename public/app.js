@@ -1113,10 +1113,10 @@ function renderTable(leads, incomingLeadId = null) {
                         </div>
                         <span class="lead-category">
                             ${escapeHtml(lead.category || 'Local Business')} • <span style="color: #71717A;">${escapeHtml(lead.list_name || 'General')}</span>
-                            ${lead.whatsapp_number ? ` • <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" onclick="event.stopPropagation();">WA: ${escapeHtml(lead.whatsapp_number)}</a>` : ''}
+                            ${lead.whatsapp_number ? ` • <a href="javascript:void(0)" class="whatsapp-badge" onclick="event.stopPropagation(); window.openWhatsAppChatForLead('${lead.id}', '${escapeHtml(lead.whatsapp_number)}', event);" title="Open WhatsApp chat with tailored AI pitch">WA: ${escapeHtml(lead.whatsapp_number)}</a>` : (lead.phone ? ` • <a href="javascript:void(0)" class="whatsapp-badge" style="background:#F0FDF4;color:#16A34A;border-color:#BBF7D0;" onclick="event.stopPropagation(); window.openWhatsAppChatForLead('${lead.id}', '${escapeHtml(lead.phone)}', event);" title="Open WhatsApp chat with tailored AI pitch"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px; margin-right: 2px;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>WA</a>` : '')}
                         </span>
                         <span style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
-                            ${escapeHtml(district + city)} ${lead.phone ? `• ${escapeHtml(lead.phone)}` : ''}
+                            ${escapeHtml(district + city)} ${lead.phone ? `• <a href="javascript:void(0)" style="color: inherit; text-decoration: none;" onclick="event.stopPropagation(); window.openWhatsAppChatForLead('${lead.id}', '${escapeHtml(lead.phone)}', event);" title="Open WhatsApp chat in Unified Inbox">${escapeHtml(lead.phone)}</a>` : ''}
                         </span>
                     </div>
                 </td>
@@ -1155,6 +1155,12 @@ function renderTable(leads, incomingLeadId = null) {
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
                             <span>Pitch</span>
                         </button>
+                        ${(lead.whatsapp_number || lead.phone) ? `
+                            <button class="btn-row-action" style="color: #16A34A; border-color: #DCFCE7;" title="Open WhatsApp Chat & Tailored Pitch" onclick="openWhatsAppChatForLead('${lead.id}', '${escapeHtml(lead.whatsapp_number || lead.phone)}', event)">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                                <span>WA</span>
+                            </button>
+                        ` : ''}
                         <button class="btn-row-action primary" title="Send or Queue Cold Email" onclick="openEmailComposerModal(${lead.id})">
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                             <span>Email</span>
@@ -1209,8 +1215,8 @@ function renderDrawerContent(lead) {
                     <span style="font-weight: 500; color: #000;">${escapeHtml(dm.title_role || 'Owner / Director')}</span> • <span style="color: #71717A;">${escapeHtml(dm.email_source || 'Verified Source')}</span>
                 </div>
                 ${dm.email ? `<div style="font-size: 13px; margin-bottom: 3px;">Direct Personal Email: <strong style="color: #000;">${escapeHtml(dm.email)}</strong> ${dm.confidence_score >= 80 ? '<span style="font-size: 10px; color: #15803D; background: #DCFCE7; padding: 1px 6px; border-radius: 3px; margin-left: 6px;">Verified SMTP 250 OK</span>' : ''}</div>` : '<div style="font-size: 12px; color: #A1A1AA; margin-bottom: 3px;">Direct personal email unlisted.</div>'}
-                ${dm.phone ? `<div style="font-size: 13px; margin-bottom: 3px;">Direct Phone: <strong>${escapeHtml(dm.phone)}</strong></div>` : ''}
-                ${dm.whatsapp_number ? `<div style="font-size: 13px; margin-bottom: 3px;">Personal WhatsApp: <a href="https://wa.me/${escapeHtml(dm.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" style="padding: 1px 6px; font-size: 11px;">${escapeHtml(dm.whatsapp_number)}</a></div>` : ''}
+                ${dm.phone ? `<div style="font-size: 13px; margin-bottom: 3px;">Direct Phone: <strong>${escapeHtml(dm.phone)}</strong> <button class="btn-row-action" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; color: #16A34A; border-color: #DCFCE7; display: inline-flex;" onclick="openWhatsAppChatForLead('${lead.id}', '${escapeHtml(dm.phone)}', event);"><span>Chat on WA</span></button></div>` : ''}
+                ${dm.whatsapp_number ? `<div style="font-size: 13px; margin-bottom: 3px;">Personal WhatsApp: <a href="javascript:void(0)" onclick="openWhatsAppChatForLead('${lead.id}', '${escapeHtml(dm.whatsapp_number)}', event);" class="whatsapp-badge" style="padding: 1px 6px; font-size: 11px; cursor: pointer;" title="Open WhatsApp chat with tailored AI pitch">${escapeHtml(dm.whatsapp_number)}</a></div>` : ''}
                 <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
                     ${dm.linkedin_url ? `<a href="${dm.linkedin_url}" target="_blank" class="web-link" style="font-size: 11px; font-weight: 500;">Personal LinkedIn Profile</a>` : ''}
                     ${dm.facebook_url ? `<a href="${dm.facebook_url}" target="_blank" class="web-link" style="font-size: 11px; font-weight: 500;">Personal Facebook Profile</a>` : ''}
@@ -1279,12 +1285,12 @@ function renderDrawerContent(lead) {
                     <span>Full Waterfall Enrich (Owner Finder)</span>
                 </button>
                 ${(lead.whatsapp_number || lead.phone) ? `
-                    <a href="https://wa.me/${escapeHtml((lead.whatsapp_number || lead.phone).replace(/\D/g, ''))}" target="_blank" class="btn btn-secondary" style="border-color: #22C55E; color: #15803D; font-weight: 600; text-decoration: none;">
+                    <button type="button" class="btn btn-secondary" style="border-color: #22C55E; color: #15803D; font-weight: 600; cursor: pointer;" onclick="openWhatsAppChatForLead('${lead.id}', '${escapeHtml(lead.whatsapp_number || lead.phone)}', event);">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
                         </svg>
                         <span>${lead.whatsapp_number ? 'WhatsApp (' + escapeHtml(lead.whatsapp_number) + ')' : 'Chat on WhatsApp (' + escapeHtml(lead.phone) + ')'}</span>
-                    </a>
+                    </button>
                 ` : ''}
                 <a href="${mapsUrl}" target="_blank" class="btn btn-secondary" style="text-decoration: none;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1322,9 +1328,9 @@ function renderDrawerContent(lead) {
                 <div><strong>Target List:</strong> ${escapeHtml(lead.list_name || 'General')}</div>
                 <div><strong>Location:</strong> ${escapeHtml((lead.district_area ? lead.district_area + ', ' : '') + (lead.city || '') + (lead.country ? ', ' + lead.country : ''))}</div>
                 <div><strong>Address:</strong> ${escapeHtml(lead.address || 'N/A')}</div>
-                <div><strong>Phone:</strong> ${escapeHtml(lead.phone || 'N/A')}</div>
+                <div><strong>Phone:</strong> ${escapeHtml(lead.phone || 'N/A')} ${(lead.phone) ? `<button class="btn-row-action" style="padding: 2px 7px; margin-left: 6px; color: #16A34A; border-color: #DCFCE7; display: inline-flex;" onclick="openWhatsAppChatForLead('${lead.id}', '${escapeHtml(lead.phone)}', event);"><span>Chat on WhatsApp</span></button>` : ''}</div>
                 ${lead.company_email ? `<div><strong>Company General Inbox:</strong> <span style="font-weight: 600; color: #18181B;">${escapeHtml(lead.company_email)}</span> <span style="font-size: 10px; background: #F4F4F5; padding: 2px 5px; border-radius: 3px; color: #71717A;">General Inbox</span></div>` : ''}
-                ${lead.whatsapp_number ? `<div><strong>Company WhatsApp:</strong> <a href="https://wa.me/${escapeHtml(lead.whatsapp_number.replace(/\D/g, ''))}" target="_blank" class="whatsapp-badge" style="padding: 1px 6px;">${escapeHtml(lead.whatsapp_number)}</a></div>` : ''}
+                ${lead.whatsapp_number ? `<div><strong>Company WhatsApp:</strong> <a href="javascript:void(0)" onclick="openWhatsAppChatForLead('${lead.id}', '${escapeHtml(lead.whatsapp_number)}', event);" class="whatsapp-badge" style="padding: 1px 6px; cursor: pointer;" title="Open WhatsApp chat with AI pitch">${escapeHtml(lead.whatsapp_number)}</a></div>` : ''}
                 <div><strong>Website:</strong> ${lead.website ? `<a href="${lead.website}" target="_blank" class="web-link">${escapeHtml(lead.website)}</a>` : '<span style="color: #71717A;">None (Pain Point)</span>'}</div>
                 <div><strong>Reputation:</strong> ★ ${lead.review_rating || 0} (${lead.review_count || 0} reviews)</div>
                 <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
@@ -2382,7 +2388,43 @@ window.switchPitchChannel = function (channel) {
         subjectGroup.style.display = channel === 'email' ? 'block' : 'none';
     }
 
+    const transferBtn = document.getElementById('transferToEmailBtn');
+    if (transferBtn) {
+        if (channel === 'whatsapp') {
+            transferBtn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+                <span>Send via WhatsApp Inbox</span>
+            `;
+            transferBtn.style.background = '#15803D';
+            transferBtn.style.borderColor = '#15803D';
+            transferBtn.onclick = window.transferPitchToWhatsAppInbox;
+        } else {
+            transferBtn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+                <span>Send via Email Composer</span>
+            `;
+            transferBtn.style.background = '';
+            transferBtn.style.borderColor = '';
+            transferBtn.onclick = window.transferPitchToEmailComposer;
+        }
+    }
+
     populatePitchModalFields();
+};
+
+window.transferPitchToWhatsAppInbox = function () {
+    if (!activePitchLead) return;
+    const lead = activePitchLead;
+    const bodyInput = document.getElementById('pitchModalBody');
+    const pitchText = bodyInput ? bodyInput.value.trim() : '';
+    const phone = lead.whatsapp_number || lead.phone;
+    closePitchModal();
+    window.openWhatsAppChatForLead(lead.id, phone, null, pitchText);
 };
 
 function populatePitchModalFields() {
@@ -2398,7 +2440,7 @@ function populatePitchModalFields() {
     } else if (currentPitchChannel === 'linkedin') {
         bodyInput.value = multi.linkedin_note || `Hi ${lead.gmb_owner_name || 'there'}, noticed ${lead.title} in ${lead.city || 'your area'}. Let's connect!`;
     } else if (currentPitchChannel === 'whatsapp') {
-        bodyInput.value = multi.whatsapp_quick_msg || `Hi ${lead.gmb_owner_name || 'there'}! Reached out regarding ${lead.title}.`;
+        bodyInput.value = multi.whatsapp_quick_msg || `Hi ${lead.gmb_owner_name || 'there'} - saw ${lead.title}'s ${lead.review_rating || '5'}★ standing in ${lead.city || 'your area'}. We help local specialists capture lost client inquiries on autopilot. Does tomorrow at 2 PM work for a quick 5-min intro?`;
     }
 }
 
@@ -2497,6 +2539,117 @@ window.triggerRowDeepEnrich = async function (leadId, btn) {
 // Legacy drawer trigger alias
 window.triggerGeneratePitch = async function (leadId) {
     await openPitchModal(leadId);
+};
+
+/**
+ * 1-Click WhatsApp Chat for Lead:
+ * Redirects internally to Omnichannel Unified Inbox, creates/finds the active conversation,
+ * and preloads a custom tailored AI pitch for this business into the composer.
+ */
+window.openWhatsAppChatForLead = async function (leadId, phone, event, customPitch = null) {
+    if (event) {
+        if (event.preventDefault) event.preventDefault();
+        if (event.stopPropagation) event.stopPropagation();
+    }
+
+    // Resolve target phone and lead details
+    let targetPhone = phone;
+    let targetLead = null;
+    if (leadId) {
+        targetLead = allLeads.find(l => String(l.id) === String(leadId));
+        if (!targetPhone && targetLead) {
+            targetPhone = targetLead.whatsapp_number || targetLead.phone;
+        }
+    }
+
+    if (!targetPhone) {
+        showToast('No phone number found for this lead.');
+        return;
+    }
+
+    // Close any open drawers or modals cleanly
+    if (window.closeLeadDetail) window.closeLeadDetail();
+    if (window.closePitchModal) window.closePitchModal();
+    const emailModal = document.getElementById('coldEmailModalOverlay');
+    if (emailModal) emailModal.style.display = 'none';
+
+    showToast('💬 Opening WhatsApp chat & generating tailored pitch...');
+
+    try {
+        const leadTitle = targetLead ? targetLead.title : null;
+
+        // 1. Fetch or create conversation thread
+        const convPromise = fetch('/api/inbox/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                leadId: leadId ? parseInt(leadId, 10) : null,
+                channel: 'whatsapp',
+                contactIdentifier: targetPhone,
+                contactName: leadTitle || targetPhone,
+                phone: targetPhone
+            })
+        }).then(r => r.json());
+
+        // 2. Fetch business-tailored pitch (if customPitch not already provided)
+        const pitchPromise = customPitch
+            ? Promise.resolve({ success: true, pitch: customPitch })
+            : (leadId 
+                ? fetch(`/api/leads/${leadId}/whatsapp-pitch`).then(r => r.json()).catch(() => null)
+                : Promise.resolve(null));
+
+        const [convData, pitchData] = await Promise.all([convPromise, pitchPromise]);
+
+        if (!convData || !convData.success || !convData.conversation) {
+            showToast('Failed to open chat: ' + ((convData && convData.error) || 'Server error'));
+            return;
+        }
+
+        const conv = convData.conversation;
+        let tailoredPitch = '';
+        if (customPitch) {
+            tailoredPitch = customPitch;
+        } else if (pitchData && pitchData.success && pitchData.pitch) {
+            tailoredPitch = pitchData.pitch;
+        } else if (targetLead && targetLead.multi_channel_pitch && targetLead.multi_channel_pitch.whatsapp_quick_msg) {
+            tailoredPitch = targetLead.multi_channel_pitch.whatsapp_quick_msg;
+        } else {
+            const bTitle = (targetLead && targetLead.title) || (conv.contact_name) || 'your business';
+            const bCity = (targetLead && targetLead.city) || '';
+            const bRating = (targetLead && targetLead.review_rating) || '5';
+            tailoredPitch = `Hi there - saw ${bTitle}'s ${bRating}★ standing${bCity ? ' in ' + bCity : ''}. We help local leaders capture lost client inquiries on autopilot. Does tomorrow at 2 PM work for a quick 5-min intro?`;
+        }
+
+        // 3. Switch screen to Omnichannel Inbox
+        switchScreen('inbox');
+
+        // 4. Ensure WhatsApp filter is active or 'all'
+        if (typeof currentInboxChannelFilter !== 'undefined' && currentInboxChannelFilter !== 'all' && currentInboxChannelFilter !== 'whatsapp') {
+            window.filterInboxChannel('all');
+        }
+
+        // 5. Reload conversations list so thread appears in sidebar
+        await loadInboxConversations(true);
+
+        // 6. Select and open conversation thread
+        await openConversation(conv.id);
+
+        // 7. Inject tailored pitch into chatReplyInput and focus
+        const replyInput = document.getElementById('chatReplyInput');
+        if (replyInput) {
+            replyInput.value = tailoredPitch;
+            if (window.autoResizeChatInput) window.autoResizeChatInput(replyInput);
+            replyInput.focus();
+            try {
+                replyInput.setSelectionRange(replyInput.value.length, replyInput.value.length);
+            } catch (e) {}
+        }
+
+        showToast(`✓ Opened WhatsApp chat for ${conv.contact_name || targetPhone}! Tailored pitch ready.`);
+    } catch (err) {
+        console.error('Error opening WhatsApp chat for lead:', err);
+        showToast('Error opening chat: ' + err.message);
+    }
 };
 
 // ==========================================================

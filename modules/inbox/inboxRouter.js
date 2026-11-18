@@ -51,6 +51,29 @@ router.get('/inbox/conversations', async (req, res) => {
     }
 });
 
+// 2b. Find or Create Active Conversation Thread (e.g. 1-click WhatsApp from Leads table or drawer)
+router.post('/inbox/conversations', async (req, res) => {
+    try {
+        const { leadId, channel = 'whatsapp', contactIdentifier, contactName, phone } = req.body;
+        const targetIdentifier = contactIdentifier || phone;
+        if (!targetIdentifier) {
+            return res.status(400).json({ success: false, error: 'contactIdentifier or phone is required' });
+        }
+
+        const conversation = await InboxRepository.findOrCreateConversation({
+            leadId: leadId ? parseInt(leadId, 10) : null,
+            channel,
+            contactIdentifier: targetIdentifier,
+            contactName
+        });
+
+        res.json({ success: true, conversation });
+    } catch (err) {
+        console.error('Error in findOrCreateConversation:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // 3. Get Single Conversation with Messages History
 router.get('/inbox/conversations/:id', async (req, res) => {
     try {

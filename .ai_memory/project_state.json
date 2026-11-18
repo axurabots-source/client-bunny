@@ -1,7 +1,7 @@
 {
   "project_name": "Client Bunny",
   "workspace_path": "d:\\Client Bunny",
-  "last_updated": "2026-11-10T20:33:00+05:00",
+  "last_updated": "2026-11-12T04:00:00+05:00",
   "status": "Active Development",
   "core_architecture": {
     "backend": {
@@ -178,9 +178,13 @@
     {
       "milestone": "Module 24: WhatsApp Baileys QR Pipeline Hardening & Multi-Environment Re-Pairing",
       "description": "Diagnosed and resolved WhatsApp QR generation pipeline flakiness: fixed generateQr to forcibly teardown stale sockets and wipe locked auth files (safeClearFolder) on force=true instead of silently returning 'connected'; added direct event resolver for qr_ready eliminating 250ms race condition and timeout freezes; updated inboxRouter.js to pass force flag; routed frontend WhatsApp endpoints through getScraperWorkerUrl() so Vercel frontend seamlessly controls persistent Render Baileys worker; added 'Link Different Number (Generate Fresh QR)' action button in UI. Verified 100% reliable QR generation."
+    },
+    {
+      "milestone": "Module 25: 1-Click WhatsApp Lead Redirection & Tailored AI Pitch Pre-Filling",
+      "description": "Replaced external wa.me redirect links across Leads table, Lead Dossier drawer, and Decision Maker cards with an internal 1-click WhatsApp action (openWhatsAppChatForLead). Automatically finds or creates an active conversation thread in Supabase (POST /api/inbox/conversations), navigates internally to the Omnichannel Unified Inbox, opens the conversation thread, and pre-loads a hyper-personalized, 3-step AI pitch (/api/leads/:id/whatsapp-pitch) tailored to the prospect's business name, city, review rating, and detected pain points into the chat composer for instant review and dispatch via live Baileys WhatsApp. Verified 100% via Playwright multi-phase automated test suite."
     }
   ],
-  "current_checkpoint": "WhatsApp Baileys QR generation pipeline 100% hardened and verified. Fresh QR codes generate reliably on every request. Localhost and Render environments synchronized.",
+  "current_checkpoint": "1-Click WhatsApp internal redirection and tailored business pitch pre-filling 100% operational and verified across Leads Table, Lead Dossier Drawer, and Pitch Modal.",
   "next_immediate_steps": [
     "Ready for user's next feature or production campaign hunts."
   ],

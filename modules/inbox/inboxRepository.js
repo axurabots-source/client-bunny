@@ -575,6 +575,125 @@ class InboxRepository {
     }
 
     /**
+     * Find or create an active conversation thread for a lead or contact identifier
+     */
+    static async findOrCreateConversation({ leadId = null, channel = 'whatsapp', contactIdentifier, contactName = null }) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const cleanIdentifier = String(contactIdentifier || '').trim();
+            const cleanDigits = cleanIdentifier.replace(/\D/g, '');
+            const searchParam = cleanDigits.length >= 7 ? cleanDigits.slice(-9) : cleanDigits;
+
+            let convRes = null;
+            if (channel === 'whatsapp' && searchParam) {
+                convRes = await client.query(`
+                    SELECT c.*, 
+                           l.title as lead_title, 
+                           l.category as lead_category, 
+                           l.city as lead_city,
+                           l.phone as lead_phone,
+                           l.status as lead_status
+                    FROM conversations c
+                    LEFT JOIN leads l ON l.id = c.lead_id
+                    WHERE c.channel = 'whatsapp' 
+                      AND regexp_replace(c.contact_identifier, '[^0-9]', '', 'g') LIKE '%' || $1
+                    ORDER BY c.updated_at DESC
+                    LIMIT 1;
+                `, [searchParam]);
+            } else {
+                convRes = await client.query(`
+                    SELECT c.*, 
+                           l.title as lead_title, 
+                           l.category as lead_category, 
+                           l.city as lead_city,
+                           l.phone as lead_phone,
+                           l.status as lead_status
+                    FROM conversations c
+                    LEFT JOIN leads l ON l.id = c.lead_id
+                    WHERE c.channel = $1 AND LOWER(c.contact_identifier) = LOWER($2)
+                    ORDER BY c.updated_at DESC
+                    LIMIT 1;
+                `, [channel, cleanIdentifier]);
+            }
+
+            let conversation;
+            if (convRes && convRes.rows.length > 0) {
+                conversation = convRes.rows[0];
+                let shouldUpdate = false;
+                let newLeadId = conversation.lead_id;
+                let newContactName = conversation.contact_name;
+
+                if (leadId && !conversation.lead_id) {
+                    newLeadId = leadId;
+                    shouldUpdate = true;
+                }
+                if (contactName && (!conversation.contact_name || conversation.contact_name === conversation.contact_identifier)) {
+                    newContactName = contactName;
+                    shouldUpdate = true;
+                }
+
+                if (shouldUpdate) {
+                    await client.query(`
+                        UPDATE conversations 
+                        SET lead_id = COALESCE($1, lead_id),
+                            contact_name = COALESCE($2, contact_name),
+                            updated_at = NOW()
+                        WHERE id = $3;
+                    `, [newLeadId, newContactName, conversation.id]);
+                    conversation.lead_id = newLeadId;
+                    conversation.contact_name = newContactName;
+                }
+            } else {
+                let resolvedLeadId = leadId ? parseInt(leadId, 10) : null;
+                let displayName = contactName;
+
+                if (resolvedLeadId) {
+                    const leadRes = await client.query('SELECT id, title, phone, city, category FROM leads WHERE id = $1 LIMIT 1;', [resolvedLeadId]);
+                    if (leadRes.rows.length > 0) {
+                        displayName = displayName || leadRes.rows[0].title;
+                    }
+                } else if (cleanDigits.length >= 7) {
+                    const matchedLead = await this.matchLeadByContact(cleanIdentifier, channel);
+                    if (matchedLead) {
+                        resolvedLeadId = matchedLead.id;
+                        displayName = displayName || matchedLead.title;
+                    }
+                }
+
+                const formattedIdentifier = (channel === 'whatsapp' && cleanDigits.length >= 7) ? '+' + cleanDigits : cleanIdentifier;
+                displayName = displayName || formattedIdentifier;
+
+                const insertRes = await client.query(`
+                    INSERT INTO conversations (
+                        lead_id, channel, contact_identifier, contact_name,
+                        subject, last_message_preview, last_message_at, unread_count, status, created_at, updated_at
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, NOW(), 0, 'open', NOW(), NOW()
+                    ) RETURNING *;
+                `, [
+                    resolvedLeadId,
+                    channel,
+                    formattedIdentifier,
+                    displayName,
+                    channel === 'whatsapp' ? 'WhatsApp Chat' : 'Direct Inquiry',
+                    'Drafting tailored pitch...'
+                ]);
+                conversation = insertRes.rows[0];
+            }
+
+            await client.query('COMMIT');
+            return conversation;
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            try { client.release(); } catch (e) {}
+        }
+    }
+
+    /**
      * Delete a conversation thread and its messages
      */
     static async deleteConversation(conversationId) {
