@@ -8,7 +8,8 @@ const crypto = require('crypto');
 
 // Derive 32-byte master key from environment secret
 function getMasterKey() {
-    const rawSecret = process.env.INBOX_MASTER_KEY || 
+    const rawSecret = process.env.CRYPTO_VAULT_KEY ||
+                      process.env.INBOX_MASTER_KEY || 
                       process.env.SUPABASE_SERVICE_ROLE_KEY || 
                       process.env.DATABASE_URL || 
                       'client-bunny-enterprise-secure-vault-key-2026';
