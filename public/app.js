@@ -122,78 +122,31 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==========================================================
-// 1.0. SCRAPER WORKER CONFIGURATION & DUAL-ENGINE SUPPORT
+// 1.0. DIRECT CLOUD SCRAPER WORKER INTEGRATION
 // ==========================================================
+const RENDER_CLOUD_WORKER_URL = 'https://client-bunny.onrender.com';
+
 function getScraperWorkerUrl() {
-    const saved = localStorage.getItem('cb_scraper_worker_url');
-    if (saved && saved.trim()) {
-        return saved.trim().replace(/\/+$/, '');
+    // When running on Vercel or any cloud domain, directly stream via Render worker
+    if (window.location.hostname.includes('vercel.app') || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
+        return RENDER_CLOUD_WORKER_URL;
     }
-    if (window.location.hostname.includes('vercel.app')) {
-        return 'https://client-bunny.onrender.com';
-    }
+    // On localhost, default to local server
     return '';
 }
 
-function updateWorkerStatusBadge() {
+function initWorkerSettings() {
     const engineDot = document.getElementById('engineStatusDot');
     const engineLabel = document.getElementById('engineStatusLabel');
-    const workerInput = document.getElementById('customWorkerUrlInput');
-    const currentWorker = getScraperWorkerUrl();
-
-    if (workerInput && !workerInput.value) {
-        workerInput.value = localStorage.getItem('cb_scraper_worker_url') || (window.location.hostname.includes('vercel.app') ? 'https://client-bunny.onrender.com' : '');
-    }
-
     if (!engineDot || !engineLabel) return;
 
+    const currentWorker = getScraperWorkerUrl();
     if (currentWorker) {
-        engineDot.style.background = '#3B82F6';
-        const displayHost = currentWorker.replace(/^https?:\/\//, '').split('/')[0];
-        engineLabel.textContent = `Scraper Engine: Cloud Worker (${displayHost})`;
+        engineDot.style.background = '#10B981';
+        engineLabel.textContent = 'Cloud Engine: Connected (client-bunny.onrender.com)';
     } else {
         engineDot.style.background = '#10B981';
-        engineLabel.textContent = 'Scraper Engine: Localhost PC (Direct Playwright)';
-    }
-}
-
-function initWorkerSettings() {
-    updateWorkerStatusBadge();
-
-    const toggleBtn = document.getElementById('toggleWorkerSettingsBtn');
-    const box = document.getElementById('workerSettingsBox');
-    const saveBtn = document.getElementById('saveWorkerUrlBtn');
-    const input = document.getElementById('customWorkerUrlInput');
-
-    if (toggleBtn && box) {
-        toggleBtn.addEventListener('click', () => {
-            box.style.display = box.style.display === 'none' ? 'block' : 'none';
-        });
-    }
-
-    if (saveBtn && input) {
-        saveBtn.addEventListener('click', async () => {
-            const val = input.value.trim().replace(/\/+$/, '');
-            if (val) {
-                localStorage.setItem('cb_scraper_worker_url', val);
-                showToast(`Saved Worker URL: ${val}. Testing connectivity...`);
-                try {
-                    const res = await fetch(`${val}/api/health`, { method: 'GET' });
-                    if (res.ok) {
-                        showToast(`Connected to Cloud Worker successfully!`);
-                    } else {
-                        showToast(`Worker responded with status ${res.status}.`);
-                    }
-                } catch (netErr) {
-                    showToast(`Saved, but worker check returned: ${netErr.message}`);
-                }
-            } else {
-                localStorage.removeItem('cb_scraper_worker_url');
-                showToast('Reset to default scraper engine.');
-            }
-            updateWorkerStatusBadge();
-            if (box) box.style.display = 'none';
-        });
+        engineLabel.textContent = 'Local Engine: Connected (Localhost PC)';
     }
 }
 
@@ -1007,9 +960,6 @@ function bindEvents() {
             console.error('SSE connection interrupted:', err);
             eventSource.close();
             restoreHuntBtn();
-            if (window.location.hostname.includes('vercel.app') && !localStorage.getItem('cb_scraper_worker_url')) {
-                showToast('Notice: Live scraping on Vercel requires your Render worker container. Configure your Worker URL in Hunt Launchpad.');
-            }
             fetchLeads();
             fetchStats();
         };

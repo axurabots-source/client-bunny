@@ -176,7 +176,7 @@
       "description": "Engineered dedicated Sub-Niche extraction system (modules/m2_gmb_integration/subNicheEngine.js) resolving query location stutter (e.g., 'cardiac surgeons in Manchester England' -> clean 'Cardiac Surgeons in Manchester, United Kingdom'). Built multi-anchor semantic expansion with synonym variants, and 0-100% semantic relevance scoring to filter out irrelevant ads and non-target listings. Converted hunt execution to Stream-First architecture (saving and emitting leads immediately via SSE while running deep detective auto-enrichment asynchronously in background). Created Render Dockerfile, render.yaml, and decoupled Vercel-to-Render worker dual-engine support with live UI configuration badge and /api/health monitoring. Verified live extraction with 15/15 target cardiac surgeon leads saved and streamed."
     }
   ],
-  "current_checkpoint": "Render Cloud Worker (https://client-bunny.onrender.com) is 100% LIVE, operational, and connected to Supabase. Live sub-niche Google Maps scraping via Docker Playwright verified end-to-end (15/15 leads extracted and saved). Vercel frontend fully connected.",
+  "current_checkpoint": "Direct Render worker automation complete. Removed manual 'Configure Worker' UI button and form fields. Frontend automatically resolves Render worker on cloud deployments and local engine on localhost.",
   "next_immediate_steps": [
     "Ready for user's next feature or production campaign hunts."
   ],
