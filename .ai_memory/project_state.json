@@ -182,11 +182,15 @@
     {
       "milestone": "Module 25: 1-Click WhatsApp Lead Redirection & Tailored AI Pitch Pre-Filling",
       "description": "Replaced external wa.me redirect links across Leads table, Lead Dossier drawer, and Decision Maker cards with an internal 1-click WhatsApp action (openWhatsAppChatForLead). Automatically finds or creates an active conversation thread in Supabase (POST /api/inbox/conversations), navigates internally to the Omnichannel Unified Inbox, opens the conversation thread, and pre-loads a hyper-personalized, 3-step AI pitch (/api/leads/:id/whatsapp-pitch) tailored to the prospect's business name, city, review rating, and detected pain points into the chat composer for instant review and dispatch via live Baileys WhatsApp. Verified 100% via Playwright multi-phase automated test suite."
+    },
+    {
+      "milestone": "Module 26: WhatsApp Cloud Session Persistence (Supabase Sync), Vercel Dispatch Routing & Live Status Banner",
+      "description": "Diagnosed and resolved stuck WhatsApp messages: (1) Added saveSessionToDb and restoreSessionFromDb syncing auth_whatsapp keys to Supabase channel_settings jsonb, ensuring session survives container restarts and Docker rebuilds; (2) Routed inbox WhatsApp replies through getScraperWorkerUrl() so Vercel frontend dispatches directly to persistent Render Baileys worker; (3) Added live WhatsApp connection pill and warning banner in active chat view and replaced silent fake success with explicit 400 error when disconnected; (4) Added intelligent country-code normalization for local 0-prefixed UK/PK phone numbers."
     }
   ],
-  "current_checkpoint": "1-Click WhatsApp internal redirection and tailored business pitch pre-filling 100% operational and verified across Leads Table, Lead Dossier Drawer, and Pitch Modal.",
+  "current_checkpoint": "WhatsApp Cloud Session Persistence to Supabase, Vercel-to-Render dispatch routing, and live connection status banner in chat header fully implemented and operational.",
   "next_immediate_steps": [
-    "Ready for user's next feature or production campaign hunts."
+    "User logs out old session in WhatsApp mobile app under Linked Devices, scans fresh QR in Channels modal to activate permanent cloud session sync."
   ],
   "key_files": {
     "server": "server.js",

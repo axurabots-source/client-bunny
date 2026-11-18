@@ -220,27 +220,35 @@ router.post('/inbox/conversations/:id/reply', async (req, res) => {
         } else if (channel === 'whatsapp') {
             const phone = conversation.contact_identifier || (conversation.lead_phone);
 
-            // Attempt direct dispatch via Baileys if connected
-            let directDispatched = false;
-            if (baileysManager.status === 'connected') {
-                try {
-                    const localMediaPath = mediaUrl ? path.join(__dirname, '../../public', mediaUrl.replace(/^\//, '')) : null;
-                    await baileysManager.sendMessage(phone, message || '', localMediaPath);
-                    directDispatched = true;
-                    console.log(`[WhatsApp Reply] Successfully dispatched via live Baileys to ${phone}`);
-                } catch (bErr) {
-                    console.warn('[WhatsApp Reply] Direct dispatch error:', bErr.message);
-                }
+            if (baileysManager.status !== 'connected') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'WhatsApp is currently disconnected on the server. Please open Channels (Integrations) and scan the QR code to connect your WhatsApp first.'
+                });
+            }
+
+            let sendResult = null;
+            try {
+                const localMediaPath = mediaUrl ? path.join(__dirname, '../../public', mediaUrl.replace(/^\//, '')) : null;
+                sendResult = await baileysManager.sendMessage(phone, message || '', localMediaPath);
+                console.log(`[WhatsApp Reply] Successfully dispatched via live Baileys to ${phone}`);
+            } catch (bErr) {
+                console.error('[WhatsApp Reply] Direct dispatch error:', bErr.message);
+                return res.status(500).json({
+                    success: false,
+                    error: `WhatsApp delivery failed: ${bErr.message}`
+                });
             }
 
             const waResult = await WhatsAppReceiver.sendWhatsAppReply({
                 phone,
                 message: fullMessageBody,
                 conversationId,
-                leadId: conversation.lead_id
+                leadId: conversation.lead_id,
+                rawPayload: sendResult
             });
             outboundMsg = waResult.message;
-            return res.json({ success: true, message: outboundMsg, waLink: waResult.waLink, directDispatched });
+            return res.json({ success: true, message: outboundMsg, directDispatched: true });
         } else {
             // Instagram / Generic Outbound
             outboundMsg = await InboxRepository.recordOutboundMessage({

@@ -23,6 +23,7 @@ try {
     pino = () => ({ level: 'silent', trace: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, fatal: () => {}, child: () => ({ trace: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, fatal: () => {} }) });
 }
 const { InboxRepository } = require('./inboxRepository');
+const { pool } = require('../m1_storage/leadRepository');
 
 function safeClearFolder(folderPath) {
     if (!fs.existsSync(folderPath)) return;
@@ -59,11 +60,94 @@ class BaileysManager {
         this.contacts = {};
         this._pendingQrResolver = null;
 
-        // Auto-initialize if session credentials already exist on disk (skip in Vercel serverless)
-        if (!process.env.VERCEL && fs.existsSync(path.join(this.authFolder, 'creds.json'))) {
-            setTimeout(() => {
-                this.init().catch(err => console.warn('[WhatsApp Baileys] Auto-init notice:', err.message));
+        // Auto-initialize if session credentials exist on disk OR in Supabase (skip in Vercel serverless)
+        if (!process.env.VERCEL) {
+            setTimeout(async () => {
+                try {
+                    let hasCreds = fs.existsSync(path.join(this.authFolder, 'creds.json'));
+                    if (!hasCreds) {
+                        hasCreds = await this.restoreSessionFromDb();
+                    }
+                    if (hasCreds) {
+                        this.init().catch(err => console.warn('[WhatsApp Baileys] Auto-init notice:', err.message));
+                    }
+                } catch (e) {
+                    console.warn('[WhatsApp Baileys] Startup check note:', e.message);
+                }
             }, 1000);
+        }
+    }
+
+    /**
+     * Persist active WhatsApp credentials from disk to Supabase PostgreSQL channel_settings.
+     * Guarantees session persistence across container restarts and Docker rebuilds.
+     */
+    async saveSessionToDb() {
+        if (!fs.existsSync(this.authFolder)) return;
+        try {
+            const files = fs.readdirSync(this.authFolder);
+            if (!files.includes('creds.json')) return;
+
+            const sessionFiles = {};
+            for (const f of files) {
+                const fullPath = path.join(this.authFolder, f);
+                try {
+                    if (!fs.lstatSync(fullPath).isDirectory()) {
+                        sessionFiles[f] = fs.readFileSync(fullPath, 'utf8');
+                    }
+                } catch (e) {}
+            }
+
+            const configData = {
+                files: sessionFiles,
+                connectedUser: this.connectedUser,
+                savedAt: new Date().toISOString()
+            };
+
+            await pool.query(`
+                INSERT INTO channel_settings (channel, is_enabled, config_data, updated_at)
+                VALUES ('whatsapp', true, $1, NOW())
+                ON CONFLICT (channel) DO UPDATE 
+                SET config_data = $1, is_enabled = true, updated_at = NOW();
+            `, [JSON.stringify(configData)]);
+
+            console.log(`[WhatsApp Baileys] 💾 Session state synchronized to Supabase (${Object.keys(sessionFiles).length} keys).`);
+        } catch (err) {
+            console.warn('[WhatsApp Baileys] Session DB save note:', err.message);
+        }
+    }
+
+    /**
+     * Restore WhatsApp session credentials from Supabase PostgreSQL to disk.
+     */
+    async restoreSessionFromDb() {
+        try {
+            const res = await pool.query(`SELECT config_data FROM channel_settings WHERE channel = 'whatsapp' LIMIT 1;`);
+            if (!res.rows.length || !res.rows[0].config_data?.files) {
+                return false;
+            }
+
+            const sessionData = res.rows[0].config_data;
+            const files = sessionData.files || {};
+            if (!files['creds.json']) return false;
+
+            if (!fs.existsSync(this.authFolder)) {
+                fs.mkdirSync(this.authFolder, { recursive: true });
+            }
+
+            for (const [filename, content] of Object.entries(files)) {
+                fs.writeFileSync(path.join(this.authFolder, filename), content, 'utf8');
+            }
+
+            if (sessionData.connectedUser) {
+                this.connectedUser = sessionData.connectedUser;
+            }
+
+            console.log(`[WhatsApp Baileys] 📦 Restored WhatsApp session from Supabase (${Object.keys(files).length} keys, user: +${this.connectedUser || 'Active'}).`);
+            return true;
+        } catch (err) {
+            console.warn('[WhatsApp Baileys] Session DB restore note:', err.message);
+            return false;
         }
     }
 
@@ -105,6 +189,7 @@ class BaileysManager {
 
         // Wipe stale credentials so Baileys produces a brand new pairing QR
         safeClearFolder(this.authFolder);
+        await pool.query("DELETE FROM channel_settings WHERE channel = 'whatsapp';").catch(() => {});
 
         this.status = 'connecting';
         this.currentQr = null;
@@ -213,7 +298,10 @@ class BaileysManager {
                 });
             });
 
-            this.sock.ev.on('creds.update', saveCreds);
+            this.sock.ev.on('creds.update', async () => {
+                await saveCreds();
+                await this.saveSessionToDb();
+            });
 
             this.sock.ev.on('contacts.upsert', (newContacts) => {
                 if (Array.isArray(newContacts)) {
@@ -257,6 +345,7 @@ class BaileysManager {
                     const jid = this.sock?.user ? (this.sock.user.id || '') : '';
                     this.connectedUser = jid.split(':')[0] || 'Active';
                     console.log(`[WhatsApp Baileys] ✅ Connected as +${this.connectedUser}!`);
+                    await this.saveSessionToDb();
                     if (this._pendingQrResolver) {
                         this._pendingQrResolver(this.getStatus());
                         this._pendingQrResolver = null;
@@ -469,10 +558,11 @@ class BaileysManager {
             this.currentQr = null;
             this.connectedUser = null;
 
-            // Clear credentials folder
+            // Clear credentials folder and database session
             if (fs.existsSync(this.authFolder)) {
                 fs.rmSync(this.authFolder, { recursive: true, force: true });
             }
+            await pool.query("DELETE FROM channel_settings WHERE channel = 'whatsapp';").catch(() => {});
 
             return { success: true, message: 'Disconnected successfully' };
         } catch (err) {
@@ -483,11 +573,30 @@ class BaileysManager {
 
     async sendMessage(phone, text, mediaPath = null) {
         if (!this.sock || this.status !== 'connected') {
-            throw new Error('WhatsApp is not connected. Please scan QR Code first.');
+            throw new Error('WhatsApp is not connected on the server. Please open Channels and scan the QR code with WhatsApp first.');
         }
 
-        const cleanPhone = phone.replace(/\D/g, '');
+        let cleanPhone = String(phone || '').replace(/\D/g, '');
+        if (!cleanPhone) {
+            throw new Error('Invalid phone number provided for WhatsApp dispatch.');
+        }
+
+        // If local number starts with 0 (e.g. UK 0161... / 020... or PK 03...), normalize country code
+        if (cleanPhone.startsWith('0')) {
+            const userCountryCode = (this.connectedUser || '').slice(0, 2);
+            if (cleanPhone.length === 11 && (cleanPhone.startsWith('07') || cleanPhone.startsWith('02') || cleanPhone.startsWith('01'))) {
+                // UK number
+                cleanPhone = '44' + cleanPhone.slice(1);
+            } else if (cleanPhone.length === 11 && cleanPhone.startsWith('03')) {
+                // PK mobile
+                cleanPhone = '92' + cleanPhone.slice(1);
+            } else if (userCountryCode) {
+                cleanPhone = userCountryCode + cleanPhone.slice(1);
+            }
+        }
+
         const jid = `${cleanPhone}@s.whatsapp.net`;
+        console.log(`[WhatsApp Baileys] 🚀 Dispatching message via Baileys to JID: ${jid}...`);
 
         if (mediaPath && fs.existsSync(mediaPath)) {
             const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(mediaPath);

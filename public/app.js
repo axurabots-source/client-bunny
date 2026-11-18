@@ -2906,6 +2906,42 @@ window.openConversation = async function (id, silent = false) {
             replyIndicator.innerHTML = `${chIcon} Replying via <strong>${channel.toUpperCase()}</strong> (${escapeHtml(contactIdentifier)})`;
         }
 
+        // WhatsApp Live Connection Status Indicator & Warning Banner
+        const waStatusPill = document.getElementById('activeChatWaStatusPill');
+        const waWarningRow = document.getElementById('chatWaWarningRow');
+        if (channel === 'whatsapp') {
+            try {
+                const backendUrl = getScraperWorkerUrl();
+                const stRes = await fetch(`${backendUrl}/api/whatsapp/status`);
+                const stData = await stRes.json();
+                if (stData.status === 'connected') {
+                    if (waStatusPill) {
+                        waStatusPill.style.display = 'inline-flex';
+                        waStatusPill.style.background = '#DCFCE7';
+                        waStatusPill.style.color = '#15803D';
+                        waStatusPill.textContent = '🟢 Live';
+                        waStatusPill.title = `Connected as +${stData.connectedUser || 'Active'}`;
+                    }
+                    if (waWarningRow) waWarningRow.style.display = 'none';
+                } else {
+                    if (waStatusPill) {
+                        waStatusPill.style.display = 'inline-flex';
+                        waStatusPill.style.background = '#FEE2E2';
+                        waStatusPill.style.color = '#B91C1C';
+                        waStatusPill.textContent = '🔴 Disconnected';
+                        waStatusPill.title = 'Click to open Channels and connect WhatsApp';
+                    }
+                    if (waWarningRow) waWarningRow.style.display = 'flex';
+                }
+            } catch (e) {
+                if (waStatusPill) waStatusPill.style.display = 'none';
+                if (waWarningRow) waWarningRow.style.display = 'none';
+            }
+        } else {
+            if (waStatusPill) waStatusPill.style.display = 'none';
+            if (waWarningRow) waWarningRow.style.display = 'none';
+        }
+
         // Email Subject Input Management
         const subjectRow = document.getElementById('chatEmailSubjectRow');
         const subjectInput = document.getElementById('chatEmailSubjectInput');
@@ -3304,7 +3340,8 @@ window.sendActiveChatReply = async function () {
         const subjectInput = document.getElementById('chatEmailSubjectInput');
         const customSubject = subjectInput ? subjectInput.value.trim() : '';
 
-        const res = await fetch(`/api/inbox/conversations/${activeConversationId}/reply`, {
+        const backendUrl = getScraperWorkerUrl();
+        const res = await fetch(`${backendUrl}/api/inbox/conversations/${activeConversationId}/reply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
