@@ -65,14 +65,18 @@
       "whatsapp": {
         "engine": "@whiskeysockets/baileys (Native WhatsApp Web Socket)",
         "manager": "modules/inbox/baileysManager.js",
-        "auth_state": "auth_whatsapp/",
-        "connection_mode": "Live QR Code Scan from WhatsApp Mobile App (Linked Devices)",
+        "auth_state": "auth_whatsapp/ with Supabase PostgreSQL cloud sync (channel_settings table)",
+        "connection_mode": "Live QR Code Scan from WhatsApp Mobile App (Linked Devices) with Auto-Session Restore",
         "active_number": "+92 329 1866966",
         "features": [
           "Auto-QR generation in UI",
           "Real-time bidirectional message sync",
           "Media and image rendering",
-          "Full history sync"
+          "Full history sync",
+          "Cloud session persistence (survives container restarts & redeploys via Supabase channel_settings)",
+          "1-click lead redirect from Leads table/drawer with tailored AI pitch",
+          "Live connection status pill & disconnected warning banner in chat header",
+          "Smart international phone normalization (UK 01/02/07 & PK 03)"
         ]
       },
       "meta_instagram": {
